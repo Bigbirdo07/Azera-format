@@ -486,6 +486,19 @@ def _run_code_analyst(*, request, planner_request, selected_sheet, loaded,
     except Exception:
         return False  # any failure → let the deterministic dispatcher try
 
+    # Model outage shouldn't be a silent blank. If the analyst couldn't reach the
+    # local model, tell the user plainly, then fall back to the deterministic
+    # tools (which need no model) for this turn.
+    if result.error and any(
+        token in result.error.lower()
+        for token in ("model call failed", "connection refused", "unavailable", "no response")
+    ):
+        st.session_state["analyst_trace_debug"] = {"question": planner_request,
+                                                    "error": result.error, "grounded": False}
+        _say("⚠️ The local AI model isn't reachable right now, so I answered with the built-in "
+             "tools. Start Ollama (the AI analyst) to re-enable richer answers.")
+        return False
+
     if not result.ok or not result.grounded:
         return False
 

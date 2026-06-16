@@ -388,9 +388,20 @@ def _classify_action_intent(message, columns, state, sheet) -> dict[str, Any] | 
     return None
 
 
+_COUNT_QUESTION_RE = re.compile(r"\b(?:how many|number of|count of|how much|total number of)\b")
+
+
 def _academic_insight_query(message: str, sheet: str, columns: list[str]) -> dict[str, Any] | None:
     text = normalize_text(message or "")
     if not text:
+        return None
+
+    # Count questions ("how many students need attendance support") ask for a
+    # COUNT of a column, not a ranked intervention/advisor LIST. Without this
+    # guard, "need ... support" / "attention" cues hijack such questions into the
+    # specialist summaries and answer the wrong number. Let them fall through to
+    # the generic count planner (and on to the analyst).
+    if _COUNT_QUESTION_RE.search(text):
         return None
 
     if _asks_for_advisor_outcomes(text):

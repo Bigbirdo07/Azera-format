@@ -361,7 +361,37 @@ def build_value_hints(message: str, df: pd.DataFrame, max_unique: int = 25, max_
     return block
 
 
+def build_value_domains(df: pd.DataFrame, max_unique: int = 6, max_cols: int = 10) -> str:
+    """List the exact values of *low-cardinality* categorical columns.
+
+    Without this, the model invents near-miss spellings — 'Need Attendance
+    Support' instead of the real 'Needs Attendance Support' — and silently
+    filters to zero rows. Showing the real domain pins the exact strings.
+
+    Deliberately conservative (<=6 distinct, <=10 columns): a small model is
+    sensitive to prompt size, so dumping big domains (21 advisors, 29 majors)
+    bloats the prompt and degrades unrelated questions. We only pin the short
+    enumerations where exact spelling actually matters for a filter.
+    Hidden-by-default columns (names/emails) are skipped.
+    """
+    lines: list[str] = []
+    for column in df.columns:
+        if pd.api.types.is_numeric_dtype(df[column]) or is_hidden_by_default(column):
+            continue
+        values = df[column].dropna().astype(str).unique()
+        if 0 < len(values) <= max_unique:
+            shown = ", ".join(repr(str(v)) for v in values)
+            lines.append(f"- {column}: {shown}")
+        if len(lines) >= max_cols:
+            break
+    if not lines:
+        return ""
+    return "Exact values for category columns (use these spellings verbatim):\n" + "\n".join(lines) + "\n"
+
+
 def build_system_prompt(df: pd.DataFrame) -> str:
+    domains = build_value_domains(df)
+    domains_block = f"\n{domains}" if domains else ""
     return (
         "You are a data analyst answering questions about a pandas DataFrame "
         "named `df`. To answer, write a SINGLE Python code block that computes "
@@ -372,10 +402,12 @@ def build_system_prompt(df: pd.DataFrame) -> str:
         "- The DataFrame is already loaded as `df`. `pd` and `np` are available.\n"
         "- Do NOT import anything, read/write files, or use input().\n"
         "- Reference columns by their exact names shown below.\n"
+        "- For category filters, use the exact values listed — do not guess spellings.\n"
         "- Always print() what you want to see — output is captured from stdout.\n"
         "- When you have the answer, reply WITHOUT a code block, in one or two "
         "plain-English sentences. Include the concrete numbers.\n\n"
-        f"Columns:\n{_schema_block(df)}\n\n"
+        f"Columns:\n{_schema_block(df)}\n"
+        f"{domains_block}\n"
         f"Sample rows:\n{_sample_block(df)}\n"
     )
 
