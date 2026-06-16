@@ -24,9 +24,9 @@
     {"prompt": "what is their housing status", "category": "missing", "expected_intent": "clarify"},
     {"prompt": "who has meal plan issues", "category": "missing", "expected_intent": "clarify"},
 
-    {"prompt": "who seems like they need advisor attention", "category": "rich", "expected_intent": "clarify"},
+    {"prompt": "who seems like they need advisor attention", "category": "rich", "expected_intent": "query", "note": "now answered by the student_intervention_summary specialist op"},
     {"prompt": "which students look like they are slipping", "category": "rich", "expected_intent": "clarify"},
-    {"prompt": "find weird patterns in this file", "category": "rich", "expected_intent": "clarify"},
+    {"prompt": "find weird patterns in this file", "category": "rich", "expected_intent": "query", "note": "now answered by the trend_summary specialist op"},
     {"prompt": "which advisors are overloaded", "category": "rich", "expected_intent": "clarify"},
     {"prompt": "give me a dean summary of the concerning groups", "category": "rich_grounded", "expected_intent": "query", "note": "rules map 'summary' to a data-quality summary"},
     {"prompt": "who seems overloaded by advisor", "category": "rich_grounded", "expected_intent": "query", "note": "rules group by advisor (caseload)"},

@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Virtual environment
+.venv/
+venv/
+
+# Build / packaged app artifacts
+build/
+dist/
+
+# Generated data (synthetic rosters, exports, session workbooks, backups)
+outputs/
+exports/
+backups/
+
+# Logs
+logs/
+*.log
+
+# OS cruft
+.DS_Store

@@ -103,7 +103,9 @@ def test_rules_used_when_confident(sheets, columns):
 def test_llm_used_when_rules_low_and_enabled(sheets, columns):
     plan = {"intent": "query", "operation": "filter",
             "filters": [{"column": "GPA", "operator": "less_than", "value": 2.5}], "confidence": 0.6}
-    r = _route("who seems like they need advisor attention", sheets, {"Students": columns},
+    # Message is a genuinely open-ended read (not a specialized intent like
+    # advisor-attention/intervention, which the rules engine now answers itself).
+    r = _route("which students have an unusual profile", sheets, {"Students": columns},
                enabled=True, llm_call=_mock(plan))
     assert r["plan_source"] == "llm" and r["llm_used"] is True
 
@@ -612,7 +614,7 @@ def test_ranking_performance_query_resolved_by_rules_guardrail(sheets, columns):
 
 
 def test_llm_not_used_when_disabled(sheets, columns):
-    r = _route("who seems like they need advisor attention", sheets, {"Students": columns}, enabled=False)
+    r = _route("which students have an unusual profile", sheets, {"Students": columns}, enabled=False)
     assert r["plan_source"] == "clarification" and r["llm_used"] is False
 
 
@@ -662,7 +664,7 @@ def test_ollama_unavailable_is_graceful(sheets, columns):
     def boom(prompt):
         raise OllamaUnavailable("connection refused")
 
-    r = _route("find weird patterns", sheets, {"Students": columns}, enabled=True, llm_call=boom)
+    r = _route("which students have an unusual profile", sheets, {"Students": columns}, enabled=True, llm_call=boom)
     assert r["plan_source"] == "clarification"
     assert r["fallback_reason"] and "unavailable" in r["fallback_reason"]
 
@@ -840,39 +842,40 @@ def _performance_plan(message, sheets, columns):
     return r.get("plan") or {}
 
 
+# Advisor performance questions now route to the purpose-built
+# `advisor_outcome_summary` (ranked by a composite Outcome Score, top 20). The
+# meaningful contract these tests guard is unchanged: grouped by Advisor, and the
+# sort DIRECTION matches the superlative (lowest -> asc, best -> desc).
+
+
 def test_lowest_performing_advisor_sorts_ascending_with_limit(sheets, columns):
     plan = _performance_plan("what advisor has the lowest performing students", sheets, columns)
-    assert plan["operation"] == "groupby_average"
+    assert plan["operation"] == "advisor_outcome_summary"
     assert plan["group_by"] == "Advisor"
-    assert plan["value_column"] == "GPA"
-    assert plan["sort"] == {"column": "GPA", "direction": "asc"}
-    assert plan["limit"] == 1
+    assert plan["sort"] == {"column": "Outcome Score", "direction": "asc"}
+    assert plan["limit"] == 20
 
 
 def test_best_performing_advisor_sorts_descending_with_limit(sheets, columns):
     plan = _performance_plan("who is the best performing advisor", sheets, columns)
-    assert plan["operation"] == "groupby_average"
+    assert plan["operation"] == "advisor_outcome_summary"
     assert plan["group_by"] == "Advisor"
-    assert plan["sort"] == {"column": "GPA", "direction": "desc"}
-    assert plan["limit"] == 1
+    assert plan["sort"] == {"column": "Outcome Score", "direction": "desc"}
+    assert plan["limit"] == 20
 
 
 def test_teacher_best_gpa_record_falls_back_to_advisor(sheets, columns):
     plan = _performance_plan("what teacher has the best gpa record", sheets, columns)
-    assert plan["operation"] == "groupby_average"
+    assert plan["operation"] == "advisor_outcome_summary"
     assert plan["group_by"] == "Advisor"
-    assert plan["value_column"] == "GPA"
-    assert plan["sort"] == {"column": "GPA", "direction": "desc"}
-    assert plan["limit"] == 1
+    assert plan["sort"] == {"column": "Outcome Score", "direction": "desc"}
 
 
 def test_professor_best_gpa_falls_back_to_advisor(sheets, columns):
     plan = _performance_plan("what professor has the best gpa", sheets, columns)
-    assert plan["operation"] == "groupby_average"
+    assert plan["operation"] == "advisor_outcome_summary"
     assert plan["group_by"] == "Advisor"
-    assert plan["value_column"] == "GPA"
-    assert plan["sort"] == {"column": "GPA", "direction": "desc"}
-    assert plan["limit"] == 1
+    assert plan["sort"] == {"column": "Outcome Score", "direction": "desc"}
 
 
 def test_class_best_gpa_uses_year_when_no_course_column(sheets, columns):

@@ -118,6 +118,18 @@ def friendly_validation_error(exc_message: Any, columns: list[str], sheets: list
     return f"I couldn't turn that into a safe plan: {msg}"
 
 
+# Generic read operations the free-form analyst is allowed to take. Anything
+# NOT in this set (student_intervention_summary, pivot_table_summary,
+# trend_summary, advisor_outcome_summary, data_quality_summary, …) is a
+# purpose-built specialist and stays on the deterministic dispatcher. Allowlist,
+# not denylist, so new specialized operations default to the deterministic path.
+_ANALYST_GENERIC_OPS = frozenset({
+    "filtered_preview", "count_rows", "count_unique", "list_unique",
+    "average_column", "sum_column", "min_column", "max_column",
+    "groupby_count", "groupby_sum", "groupby_average",
+})
+
+
 def route_message(
     *,
     request: str,
@@ -363,13 +375,17 @@ def route_message(
         _log_turn(request=request, routing=routing, sheet_columns=sheet_columns, settings=settings)
         return
 
-    # Free-form analyst (opt-in). When enabled, read/analysis questions are
-    # answered by writing+running pandas locally instead of the fixed-operation
-    # dispatcher — the "like Claude on a spreadsheet" path. Edits/exports above
-    # still go through the deterministic confirm-and-write pipeline; this branch
-    # is reads only and never writes the workbook.
+    # Router: deterministic specialists vs free-form generalist.
+    # The analyst (opt-in) answers OPEN-ENDED questions by writing+running pandas
+    # locally — the "like Claude on a spreadsheet" path. But the planner also
+    # emits SPECIALIZED operations (intervention/pivot/trend/advisor summaries,
+    # dashboards) that are purpose-built, tested, and produce structured output.
+    # Those must win: we only hand a turn to the analyst when the plan is a
+    # GENERIC read (allowlist below). Everything else falls through to the
+    # deterministic dispatcher. Edits/exports already returned above.
     if (intent == "query" and settings.get("code_analyst_enabled")
-            and not settings.get("strict_privacy_mode", False)):
+            and not settings.get("strict_privacy_mode", False)
+            and (routing.get("plan") or {}).get("operation", "") in _ANALYST_GENERIC_OPS):
         if _run_code_analyst(request=request, planner_request=planner_request,
                              selected_sheet=selected_sheet, loaded=loaded,
                              settings=settings, memory=memory):

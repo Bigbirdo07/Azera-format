@@ -195,6 +195,16 @@ def test_vague_risk_never_returns_bare_filtered_preview(sheets, columns):
         if routing["intent"] != "query":
             continue  # clarify is also acceptable per L.14
         plan = routing["plan"]
-        assert plan["filters"] or plan.get("group_by"), (
+        # The plan must be BOUNDED, not a whole-sheet dump. Bounded means any of:
+        # a filter, a grouping, a sort+limit (e.g. the intervention summary's
+        # top-50 by signal), or a specialized summary operation that isn't a bare
+        # preview/count.
+        bounded = (
+            plan["filters"]
+            or plan.get("group_by")
+            or (plan.get("sort") and plan.get("limit"))
+            or plan.get("operation") not in {"filtered_preview", "count_rows"}
+        )
+        assert bounded, (
             f"{message!r} produced a bare whole-sheet plan: {plan}"
         )
