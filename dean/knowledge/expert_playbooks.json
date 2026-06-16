@@ -1,0 +1,327 @@
+{
+  "description": "Expert-level multi-step playbooks for common university spreadsheet tasks. Each playbook describes the steps a skilled Excel analyst would take. The local Ollama planner uses these as references when it needs to translate a vague or messy user request into a structured multi-step plan. Playbooks reference concepts (balance_due, fafsa_status, program, advisor, enrollment_status, student_id) rather than literal column names. The planner is responsible for resolving each concept to the actual column name in the uploaded workbook before emitting commands.",
+  "playbooks": {
+    "missing_fafsa_report": {
+      "title": "Missing FAFSA Report",
+      "summary": "Pull every student who has not completed FAFSA or whose FAFSA is incomplete, then summarize by program and add a bar chart.",
+      "triggers": [
+        "missing fafsa",
+        "didn't do fasfa",
+        "no financial aid",
+        "missing aid",
+        "incomplete fafsa",
+        "fafsa not submitted",
+        "who hasn't filed fafsa"
+      ],
+      "required_concepts": ["fafsa_status"],
+      "optional_concepts": ["program", "advisor"],
+      "steps": [
+        {
+          "action": "filter_rows",
+          "conditions": [
+            {
+              "concept": "fafsa_status",
+              "operator": "in",
+              "value": ["Missing", "Incomplete", "Not Submitted", "Not Filed"]
+            }
+          ],
+          "output_sheet": "Missing FAFSA"
+        },
+        {
+          "action": "count_by_group",
+          "from_step": "Missing FAFSA",
+          "group_by_concept": "program",
+          "output_sheet": "Missing FAFSA by Program"
+        },
+        {
+          "action": "create_chart",
+          "from_step": "Missing FAFSA by Program",
+          "chart_type": "bar",
+          "category_concept": "program",
+          "value_column": "count",
+          "title": "Missing FAFSA by Program"
+        },
+        {
+          "action": "format_report",
+          "sheets": ["Missing FAFSA", "Missing FAFSA by Program"]
+        }
+      ]
+    },
+    "outstanding_balance_report": {
+      "title": "Outstanding Balance Report",
+      "summary": "Pull every student with a positive balance due, total the balance by program, add a chart, and format the result.",
+      "triggers": [
+        "who owes money",
+        "outstanding balance",
+        "students with balance",
+        "owe money report",
+        "unpaid balance",
+        "tuition owed"
+      ],
+      "required_concepts": ["balance_due"],
+      "optional_concepts": ["program", "advisor"],
+      "steps": [
+        {
+          "action": "filter_rows",
+          "conditions": [
+            {"concept": "balance_due", "operator": "greater_than", "value": 0}
+          ],
+          "output_sheet": "Students With Balance"
+        },
+        {
+          "action": "sum_by_group",
+          "from_step": "Students With Balance",
+          "group_by_concept": "program",
+          "sum_concept": "balance_due",
+          "output_sheet": "Balance by Program"
+        },
+        {
+          "action": "create_chart",
+          "from_step": "Balance by Program",
+          "chart_type": "bar",
+          "category_concept": "program",
+          "value_concept": "balance_due",
+          "title": "Outstanding Balance by Program"
+        },
+        {
+          "action": "format_report",
+          "sheets": ["Students With Balance", "Balance by Program"]
+        }
+      ]
+    },
+    "enrollment_summary_report": {
+      "title": "Enrollment Summary Report",
+      "summary": "Count students by enrollment status and by program, then chart the breakdown.",
+      "triggers": [
+        "enrollment summary",
+        "how is enrollment looking",
+        "enrollment breakdown",
+        "registration summary"
+      ],
+      "required_concepts": ["enrollment_status"],
+      "optional_concepts": ["program"],
+      "steps": [
+        {
+          "action": "count_by_group",
+          "group_by_concept": "enrollment_status",
+          "output_sheet": "Enrollment by Status"
+        },
+        {
+          "action": "count_by_group",
+          "group_by_concept": "program",
+          "output_sheet": "Enrollment by Program"
+        },
+        {
+          "action": "create_chart",
+          "from_step": "Enrollment by Status",
+          "chart_type": "bar",
+          "category_concept": "enrollment_status",
+          "value_column": "count",
+          "title": "Students by Enrollment Status"
+        },
+        {
+          "action": "format_report",
+          "sheets": ["Enrollment by Status", "Enrollment by Program"]
+        }
+      ]
+    },
+    "advisor_caseload_report": {
+      "title": "Advisor Caseload Report",
+      "summary": "Count assigned students per advisor and flag any advisors with empty caseloads or large caseloads.",
+      "triggers": [
+        "advisor caseload",
+        "how many students per advisor",
+        "advisor load",
+        "students per adviser"
+      ],
+      "required_concepts": ["advisor"],
+      "optional_concepts": ["program", "enrollment_status"],
+      "steps": [
+        {
+          "action": "count_by_group",
+          "group_by_concept": "advisor",
+          "output_sheet": "Advisor Caseload"
+        },
+        {
+          "action": "create_chart",
+          "from_step": "Advisor Caseload",
+          "chart_type": "bar",
+          "category_concept": "advisor",
+          "value_column": "count",
+          "title": "Students per Advisor"
+        },
+        {
+          "action": "format_report",
+          "sheets": ["Advisor Caseload"]
+        }
+      ]
+    },
+    "registration_status_report": {
+      "title": "Registration Status Report",
+      "summary": "Split students into registered and not-registered groups, count each, and chart the result.",
+      "triggers": [
+        "registration status",
+        "who hasn't registered",
+        "not registered yet",
+        "registration report"
+      ],
+      "required_concepts": ["enrollment_status"],
+      "optional_concepts": ["program"],
+      "steps": [
+        {
+          "action": "filter_rows",
+          "conditions": [
+            {
+              "concept": "enrollment_status",
+              "operator": "in",
+              "value": ["Not Registered", "Unregistered", "Not Enrolled"]
+            }
+          ],
+          "output_sheet": "Not Registered"
+        },
+        {
+          "action": "count_by_group",
+          "group_by_concept": "enrollment_status",
+          "output_sheet": "Registration Breakdown"
+        },
+        {
+          "action": "create_chart",
+          "from_step": "Registration Breakdown",
+          "chart_type": "bar",
+          "category_concept": "enrollment_status",
+          "value_column": "count",
+          "title": "Registration Status"
+        },
+        {
+          "action": "format_report",
+          "sheets": ["Not Registered", "Registration Breakdown"]
+        }
+      ]
+    },
+    "duplicate_student_id_audit": {
+      "title": "Duplicate Student ID Audit",
+      "summary": "Find any student IDs that appear more than once. Never delete originals automatically.",
+      "triggers": [
+        "duplicate ids",
+        "duplicate student id",
+        "duplicate student numbers",
+        "id duplicates"
+      ],
+      "required_concepts": ["student_id"],
+      "steps": [
+        {
+          "action": "detect_missing_values",
+          "scope": "student_id_duplicates",
+          "output_sheet": "Duplicate IDs"
+        },
+        {
+          "action": "format_report",
+          "sheets": ["Duplicate IDs"]
+        }
+      ]
+    },
+    "missing_data_audit": {
+      "title": "Missing Data Audit",
+      "summary": "Scan every column for blank values, missing FAFSA, missing advisor, missing program, and surface them as a quality report.",
+      "triggers": [
+        "missing data",
+        "find blanks",
+        "data quality",
+        "audit file"
+      ],
+      "steps": [
+        {
+          "action": "detect_missing_values",
+          "scope": "all_columns",
+          "output_sheet": "Missing Data Audit"
+        },
+        {
+          "action": "format_report",
+          "sheets": ["Missing Data Audit"]
+        }
+      ]
+    },
+    "balance_by_program_summary": {
+      "title": "Balance by Program Summary",
+      "summary": "Total outstanding balance grouped by program and chart it.",
+      "triggers": [
+        "balance by program",
+        "owed by major",
+        "balance by major",
+        "tuition by program"
+      ],
+      "required_concepts": ["balance_due", "program"],
+      "steps": [
+        {
+          "action": "sum_by_group",
+          "group_by_concept": "program",
+          "sum_concept": "balance_due",
+          "output_sheet": "Balance by Program"
+        },
+        {
+          "action": "create_chart",
+          "from_step": "Balance by Program",
+          "chart_type": "bar",
+          "category_concept": "program",
+          "value_concept": "balance_due",
+          "title": "Balance by Program"
+        },
+        {
+          "action": "format_report",
+          "sheets": ["Balance by Program"]
+        }
+      ]
+    },
+    "students_needing_follow_up": {
+      "title": "Students Needing Follow-Up Report",
+      "summary": "Identify students who are at risk: missing FAFSA OR balance due greater than 0 OR not registered. Group by advisor for outreach.",
+      "triggers": [
+        "students needing follow up",
+        "follow up list",
+        "outreach list",
+        "at risk students",
+        "who needs help"
+      ],
+      "required_concepts": ["fafsa_status", "balance_due", "enrollment_status"],
+      "optional_concepts": ["advisor", "program"],
+      "steps": [
+        {
+          "action": "filter_rows",
+          "logic": "OR",
+          "conditions": [
+            {
+              "concept": "fafsa_status",
+              "operator": "in",
+              "value": ["Missing", "Incomplete", "Not Submitted"]
+            },
+            {"concept": "balance_due", "operator": "greater_than", "value": 0},
+            {
+              "concept": "enrollment_status",
+              "operator": "in",
+              "value": ["Not Registered", "Inactive", "Withdrawn"]
+            }
+          ],
+          "output_sheet": "Follow-Up Students"
+        },
+        {
+          "action": "count_by_group",
+          "from_step": "Follow-Up Students",
+          "group_by_concept": "advisor",
+          "output_sheet": "Follow-Up by Advisor"
+        },
+        {
+          "action": "create_chart",
+          "from_step": "Follow-Up by Advisor",
+          "chart_type": "bar",
+          "category_concept": "advisor",
+          "value_column": "count",
+          "title": "Follow-Up Caseload by Advisor"
+        },
+        {
+          "action": "format_report",
+          "sheets": ["Follow-Up Students", "Follow-Up by Advisor"]
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "strict_privacy_mode": false,
+  "use_local_llm": true,
+  "ollama_model": "llama3.2:3b",
+  "llm_explanations_enabled": true,
+  "conversation_llm_enabled": true,
+  "planner_full_row_access": true,
+  "local_llm_full_row_access": true,
+  "local_llm_all_matching_rows": true,
+  "code_analyst_enabled": true
+}

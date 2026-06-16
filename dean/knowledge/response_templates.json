@@ -1,0 +1,15 @@
+{
+  "highlight_rows": "I found the column {column}. I am going to highlight rows where {condition}. Continue?",
+  "filter_rows": "I found the column {column}. I am going to show rows where {condition}. Continue?",
+  "sum_column": "I found the column {column}. I am going to sum {column}{group_text}. Continue?",
+  "count_rows": "I am going to count rows in {sheet}{condition_text}. Continue?",
+  "count_by_group": "I found the column {group_by}. I am going to count rows by {group_by}{condition_text}. Continue?",
+  "detect_missing_values": "I found the column {column}. I am going to find missing values in {column}. Continue?",
+  "remove_duplicates": "I am going to remove duplicate rows from {sheet}. Continue?",
+  "format_report": "I am going to make the report sheet {sheet} look clean. Continue?",
+  "create_formula": "I found the column {column}. I am going to add a formula column named {new_column} using {formula_type}. Continue?",
+  "create_chart": "I found the column {group_by}. I am going to create a {chart_type} chart on {output_sheet}. Continue?",
+  "create_report": "I am going to create {output_sheet} with summary metrics, a filtered table, and optional chart. Continue?",
+  "create_data_quality_report": "I am going to scan {sheet} for enrollment data quality issues and create {output_sheet}. Continue?",
+  "clarification": "I am not confident enough to run this. Please choose an action or mention a clearer column name."
+}

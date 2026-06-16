@@ -1,0 +1,46 @@
+.DS_Store
+.claude/
+dean/.claude/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Local Python environments
+.venv/
+venv/
+env/
+
+# Local app/runtime state
+*.db
+*.sqlite
+*.sqlite3
+logs/
+outputs/
+exports/
+backups/
+
+# Dean generated/runtime artifacts
+dean/.venv/
+dean/build/
+dean/dist/
+dean/models/
+dean/bin/
+dean/logs/
+dean/outputs/
+dean/exports/
+dean/backups/
+dean/__pycache__/
+dean/**/__pycache__/
+
+# Local workbook data and generated spreadsheets
+*.xlsx
+*.xlsm
+*.xls
+*.csv
+!dean/tests/fixtures/*.xlsx
+
+# OS/editor noise
+.idea/
+.vscode/
+*.swp
+*.tmp

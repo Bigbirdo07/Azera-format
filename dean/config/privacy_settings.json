@@ -1,0 +1,5 @@
+{
+  "logging_mode": "metadata_only",
+  "block_delete_row_actions": false,
+  "warn_row_threshold": 100
+}

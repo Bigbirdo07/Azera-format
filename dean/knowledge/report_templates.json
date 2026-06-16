@@ -1,0 +1,79 @@
+{
+  "enrollment_summary": {
+    "title": "Enrollment Summary Report",
+    "output_sheet": "Enrollment Summary Report",
+    "required_concepts": [],
+    "include_summary": true,
+    "include_chart": true,
+    "chart_group_concept": "enrollment_status"
+  },
+  "missing_fafsa": {
+    "title": "Missing FAFSA Report",
+    "output_sheet": "Missing FAFSA Report",
+    "required_concepts": ["fafsa_status"],
+    "conditions": [
+      {"concept": "fafsa_status", "operator": "equals", "value": "Missing"}
+    ],
+    "include_summary": true,
+    "include_chart": true,
+    "chart_group_concept": "program"
+  },
+  "outstanding_balance": {
+    "title": "Outstanding Balance Report",
+    "output_sheet": "Outstanding Balance Report",
+    "required_concepts": ["balance_due"],
+    "conditions": [
+      {"concept": "balance_due", "operator": "greater_than", "value": 0}
+    ],
+    "include_summary": true,
+    "include_chart": true,
+    "chart_group_concept": "program"
+  },
+  "inactive_withdrawn": {
+    "title": "Inactive or Withdrawn Student Report",
+    "output_sheet": "Inactive or Withdrawn Report",
+    "required_concepts": ["enrollment_status"],
+    "conditions": [
+      {"concept": "enrollment_status", "operator": "contains_any", "value": ["inactive", "withdrawn"]}
+    ],
+    "include_summary": true,
+    "include_chart": true,
+    "chart_group_concept": "program"
+  },
+  "program_enrollment": {
+    "title": "Program Enrollment Report",
+    "output_sheet": "Program Enrollment Report",
+    "required_concepts": ["program"],
+    "include_summary": true,
+    "include_chart": true,
+    "chart_group_concept": "program"
+  },
+  "advisor_caseload": {
+    "title": "Advisor Caseload Report",
+    "output_sheet": "Advisor Caseload Report",
+    "required_concepts": ["advisor"],
+    "include_summary": true,
+    "include_chart": true,
+    "chart_group_concept": "advisor"
+  },
+  "registration_status": {
+    "title": "Registration Status Report",
+    "output_sheet": "Registration Status Report",
+    "required_concepts": ["enrollment_status"],
+    "include_summary": true,
+    "include_chart": true,
+    "chart_group_concept": "enrollment_status"
+  },
+  "missing_fafsa_and_balance": {
+    "title": "Missing FAFSA and Balance Report",
+    "output_sheet": "Missing FAFSA and Balance Report",
+    "required_concepts": ["fafsa_status", "balance_due"],
+    "conditions": [
+      {"concept": "fafsa_status", "operator": "equals", "value": "Missing"},
+      {"concept": "balance_due", "operator": "greater_than", "value": 0}
+    ],
+    "include_summary": true,
+    "include_chart": true,
+    "chart_group_concept": "program"
+  }
+}

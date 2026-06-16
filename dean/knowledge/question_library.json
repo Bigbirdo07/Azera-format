@@ -1,0 +1,427 @@
+{
+  "version": 1,
+  "categories": [
+    {
+      "id": "academic_risk",
+      "title": "Academic risk & support",
+      "blurb": "Find students who may need outreach.",
+      "questions": [
+        {
+          "id": "ar_at_risk_count",
+          "text": "How many students are currently at academic risk?",
+          "requires_columns": ["academic_status"],
+          "follow_ups": [
+            "Show me the at-risk students",
+            "Group them by advisor",
+            "How many are also missing financial aid?",
+            "Export this list for outreach"
+          ]
+        },
+        {
+          "id": "ar_low_gpa",
+          "text": "Show me students with GPA below 2.0",
+          "requires_columns": ["gpa"],
+          "follow_ups": [
+            "Now only those on probation",
+            "Group them by department",
+            "Who is their advisor?",
+            "Export this list"
+          ]
+        },
+        {
+          "id": "ar_on_probation",
+          "text": "Which students are on academic probation?",
+          "requires_columns": ["academic_status"],
+          "follow_ups": [
+            "What is their average GPA?",
+            "Group them by major",
+            "Compare with students at risk",
+            "Export this list"
+          ]
+        },
+        {
+          "id": "ar_lowest_advisor",
+          "text": "What advisor has the lowest performing students?",
+          "requires_columns": ["advisor", "gpa"],
+          "follow_ups": [
+            "Show me that advisor's students",
+            "Which courses are they struggling in?",
+            "Are any of them missing financial aid?"
+          ]
+        },
+        {
+          "id": "ar_struggling_by_dept",
+          "text": "Which department has the lowest average GPA?",
+          "requires_columns": ["discipline", "gpa"],
+          "follow_ups": [
+            "Drill into that department's students",
+            "Group those students by advisor",
+            "Show me the students below 2.0 in that department"
+          ]
+        },
+        {
+          "id": "ar_warning_count",
+          "text": "How many students have a warning status?",
+          "requires_columns": ["academic_status"],
+          "follow_ups": [
+            "Show me those students",
+            "Group them by advisor",
+            "What was their last semester?"
+          ]
+        },
+        {
+          "id": "ar_credit_gap",
+          "text": "Which students are behind on credits for their year?",
+          "requires_columns": ["credits", "year"],
+          "follow_ups": [
+            "Group them by major",
+            "Who is their advisor?",
+            "How many are seniors?"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "performance",
+      "title": "Performance & strengths",
+      "blurb": "Surface top performers and high-performing groups.",
+      "questions": [
+        {
+          "id": "perf_top_students",
+          "text": "Who are the top 10 students by GPA?",
+          "requires_columns": ["gpa"],
+          "follow_ups": [
+            "Group them by major",
+            "Who is their advisor?",
+            "What is the average GPA of this group?"
+          ]
+        },
+        {
+          "id": "perf_best_advisor",
+          "text": "Which advisor has the highest performing students?",
+          "requires_columns": ["advisor", "gpa"],
+          "follow_ups": [
+            "Show me that advisor's students",
+            "How many students do they advise?",
+            "Compare with the next two advisors"
+          ]
+        },
+        {
+          "id": "perf_best_dept",
+          "text": "Which department has the highest average GPA?",
+          "requires_columns": ["discipline", "gpa"],
+          "follow_ups": [
+            "Drill into that department's students",
+            "Show me the top students in that department",
+            "How many students are in this department?"
+          ]
+        },
+        {
+          "id": "perf_avg_overall",
+          "text": "What is the average GPA across all students?",
+          "requires_columns": ["gpa"],
+          "follow_ups": [
+            "Break that down by department",
+            "Break that down by year",
+            "How many are above the average?"
+          ]
+        },
+        {
+          "id": "perf_year_compare",
+          "text": "What is the average GPA by year?",
+          "requires_columns": ["year", "gpa"],
+          "follow_ups": [
+            "Which year is doing best?",
+            "Which year has the most at-risk students?",
+            "Drill into one year"
+          ]
+        },
+        {
+          "id": "perf_major_compare",
+          "text": "How many students are in each major?",
+          "requires_columns": ["major"],
+          "follow_ups": [
+            "What is the average GPA per major?",
+            "Which major has the most at-risk students?",
+            "Show me the largest major"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "financial",
+      "title": "Financial standing",
+      "blurb": "Aid status, balances, and missing forms.",
+      "questions": [
+        {
+          "id": "fin_missing_fafsa",
+          "text": "Who is missing FAFSA?",
+          "requires_columns": ["fafsa_status"],
+          "follow_ups": [
+            "Of those, who is also at risk?",
+            "Group them by advisor",
+            "How many are seniors?",
+            "Export this list"
+          ]
+        },
+        {
+          "id": "fin_balance_due",
+          "text": "Which students have an unpaid balance?",
+          "requires_columns": ["balance_due"],
+          "follow_ups": [
+            "Show only balances above $1,000",
+            "Group by year",
+            "Are any of them also missing financial aid?",
+            "Export this list"
+          ]
+        },
+        {
+          "id": "fin_aid_incomplete",
+          "text": "Who has incomplete financial aid status?",
+          "requires_columns": ["fafsa_status"],
+          "follow_ups": [
+            "Group them by advisor",
+            "How many are also on probation?",
+            "What is their average balance?",
+            "Export this list"
+          ]
+        },
+        {
+          "id": "fin_risk_overlap",
+          "text": "Show students who are at risk AND have a balance due",
+          "requires_columns": ["academic_status", "balance_due"],
+          "follow_ups": [
+            "Group by advisor",
+            "What is their average GPA?",
+            "Export this priority outreach list"
+          ]
+        },
+        {
+          "id": "fin_aid_by_year",
+          "text": "How many students per year are missing FAFSA?",
+          "requires_columns": ["fafsa_status", "year"],
+          "follow_ups": [
+            "Drill into seniors",
+            "Compare with at-risk students",
+            "Export this list"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "advising",
+      "title": "Advising & engagement",
+      "blurb": "Caseloads, advisor coverage, and outreach lists.",
+      "questions": [
+        {
+          "id": "adv_caseload",
+          "text": "How many students does each advisor have?",
+          "requires_columns": ["advisor"],
+          "follow_ups": [
+            "Who has the largest caseload?",
+            "What is the average GPA for each advisor?",
+            "Which advisor has the most at-risk students?"
+          ]
+        },
+        {
+          "id": "adv_no_advisor",
+          "text": "Are any students missing an advisor?",
+          "requires_columns": ["advisor"],
+          "follow_ups": [
+            "Group them by major",
+            "How many are at risk?",
+            "Export this list"
+          ]
+        },
+        {
+          "id": "adv_largest_load",
+          "text": "Which advisor has the largest caseload?",
+          "requires_columns": ["advisor"],
+          "follow_ups": [
+            "Show me their students",
+            "How many of those are at risk?",
+            "Compare with the next two advisors"
+          ]
+        },
+        {
+          "id": "adv_at_risk_by_advisor",
+          "text": "Which advisor has the most at-risk students?",
+          "requires_columns": ["advisor", "academic_status"],
+          "follow_ups": [
+            "Show me those students",
+            "What is the average GPA of that group?",
+            "Export this priority outreach list"
+          ]
+        },
+        {
+          "id": "adv_caseload_balance",
+          "text": "What is the average GPA per advisor?",
+          "requires_columns": ["advisor", "gpa"],
+          "follow_ups": [
+            "Sort highest to lowest",
+            "Drill into the lowest-rated advisor",
+            "Compare with caseload size"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "demographics",
+      "title": "Population breakdowns",
+      "blurb": "Get a feel for who is in this dataset.",
+      "questions": [
+        {
+          "id": "demo_count_total",
+          "text": "How many students are in this workbook?",
+          "requires_columns": ["student"],
+          "follow_ups": [
+            "Break that down by department",
+            "Break that down by year",
+            "Break that down by enrollment status"
+          ]
+        },
+        {
+          "id": "demo_by_dept",
+          "text": "How many students are in each department?",
+          "requires_columns": ["discipline"],
+          "follow_ups": [
+            "Which department has the highest GPA?",
+            "Which department has the most at-risk students?",
+            "Show me students in the largest department"
+          ]
+        },
+        {
+          "id": "demo_by_year",
+          "text": "How many students are in each year?",
+          "requires_columns": ["year"],
+          "follow_ups": [
+            "How many are seniors?",
+            "Average GPA per year",
+            "How many seniors are at risk?"
+          ]
+        },
+        {
+          "id": "demo_by_status",
+          "text": "How many students are in each enrollment status?",
+          "requires_columns": ["enrollment_status"],
+          "follow_ups": [
+            "How many are inactive?",
+            "Group active students by major",
+            "Show me students who recently withdrew"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "data_quality",
+      "title": "Data quality",
+      "blurb": "Spot missing fields and duplicates before reporting.",
+      "questions": [
+        {
+          "id": "dq_missing",
+          "text": "Which columns have the most missing values?",
+          "requires_columns": [],
+          "follow_ups": [
+            "Show me rows where GPA is missing",
+            "Show me rows where Advisor is missing",
+            "Export rows with the most blanks"
+          ]
+        },
+        {
+          "id": "dq_duplicates",
+          "text": "Are there duplicate student IDs?",
+          "requires_columns": ["student_id"],
+          "follow_ups": [
+            "Show me the duplicate rows",
+            "Are emails also duplicated?",
+            "Export the duplicates"
+          ]
+        },
+        {
+          "id": "dq_summary",
+          "text": "Summarize what looks unusual in this workbook",
+          "requires_columns": [],
+          "follow_ups": [
+            "Show me students with the most missing fields",
+            "Are there duplicate records?",
+            "Are any GPAs out of range?"
+          ]
+        },
+        {
+          "id": "dq_outliers",
+          "text": "Are there students with out-of-range GPAs?",
+          "requires_columns": ["gpa"],
+          "follow_ups": [
+            "Show me only the outliers",
+            "Group them by department",
+            "Are any of them also flagged at risk?"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "demo_walkthrough",
+      "title": "Realistic Demo Walkthrough",
+      "blurb": "A step-by-step walkthrough demonstrating real dean-office queries, drilldowns, and edits.",
+      "questions": [
+        {
+          "id": "demo_advisors_under_25",
+          "text": "Which advisors have students under 2.5?",
+          "requires_columns": ["advisor", "gpa"],
+          "follow_ups": [
+            "Which students are those?",
+            "Break that down by department.",
+            "Mark them Academic Watch and export."
+          ]
+        },
+        {
+          "id": "demo_students_those",
+          "text": "Which students are those?",
+          "requires_columns": [],
+          "follow_ups": [
+            "Break that down by department.",
+            "Mark them Academic Watch and export."
+          ]
+        },
+        {
+          "id": "demo_breakdown_dept",
+          "text": "Break that down by department.",
+          "requires_columns": ["discipline"],
+          "follow_ups": [
+            "Mark them Academic Watch and export."
+          ]
+        },
+        {
+          "id": "demo_mark_watch",
+          "text": "Mark them Academic Watch and export.",
+          "requires_columns": ["academic_watch"],
+          "follow_ups": []
+        },
+        {
+          "id": "demo_best_dept_gpa",
+          "text": "Which department has the best average GPA?",
+          "requires_columns": ["discipline", "gpa"],
+          "follow_ups": [
+            "Show low-performing students in that department.",
+            "Export that list."
+          ]
+        },
+        {
+          "id": "demo_low_perf_dept",
+          "text": "Show low-performing students in that department.",
+          "requires_columns": ["discipline", "gpa"],
+          "follow_ups": [
+            "Export that list."
+          ]
+        },
+        {
+          "id": "demo_export_list",
+          "text": "Export that list.",
+          "requires_columns": [],
+          "follow_ups": []
+        }
+      ]
+    }
+  ]
+}
+

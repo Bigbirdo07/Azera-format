@@ -1,0 +1,39 @@
+{
+  "highlight_rows": {
+    "phrases": ["highlight", "mark", "flag", "color", "shade"],
+    "default_format": {"fill_color": "yellow"}
+  },
+  "create_formula": {
+    "phrases": ["add a column", "new column", "formula", "calculate", "lookup", "look up", "flag", "says yes", "yes if"]
+  },
+  "create_chart": {
+    "phrases": ["chart", "graph", "plot", "trend", "visualize", "visualise", "missing counts by"]
+  },
+  "create_report": {
+    "phrases": ["report", "make me a report", "create a report", "summary report", "caseload"]
+  },
+  "create_data_quality_report": {
+    "phrases": ["check this file for problems", "find missing student data", "look for duplicate ids", "audit this enrollment file", "data quality", "quality check", "audit file", "check for problems"]
+  },
+  "filter_rows": {
+    "phrases": ["show", "find", "list", "display", "filter"]
+  },
+  "sum_column": {
+    "phrases": ["sum", "total", "add up", "calculate total"]
+  },
+  "count_rows": {
+    "phrases": ["count", "how many", "number of"]
+  },
+  "count_by_group": {
+    "phrases": ["count by", "how many by", "number by", "breakdown by"]
+  },
+  "detect_missing_values": {
+    "phrases": ["missing", "blank", "blanks", "empty", "null"]
+  },
+  "remove_duplicates": {
+    "phrases": ["remove duplicates", "deduplicate", "delete duplicates", "drop duplicates"]
+  },
+  "format_report": {
+    "phrases": ["make this report look clean", "format report", "clean report", "make it readable", "format this"]
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "description": "Planner evaluation cases. expected_intent is for RULES-ONLY mode (local LLM disabled).",
+  "cases": [
+    {"prompt": "Show me Accounting students", "category": "basic", "expected_intent": "query"},
+    {"prompt": "now only seniors", "category": "basic", "expected_intent": "query"},
+    {"prompt": "now only below 2.5 GPA", "category": "basic", "expected_intent": "query"},
+    {"prompt": "sort by GPA lowest first", "category": "basic", "expected_intent": "query"},
+    {"prompt": "how many students are in each department", "category": "basic", "expected_intent": "query"},
+    {"prompt": "how many majors are there", "category": "basic", "expected_intent": "query"},
+    {"prompt": "which advisor has the most students", "category": "basic", "expected_intent": "query"},
+    {"prompt": "show students with no advisor listed", "category": "basic", "expected_intent": "query"},
+    {"prompt": "what is the average GPA by department", "category": "basic", "expected_intent": "query"},
+
+    {"prompt": "what about Biology", "category": "replacement", "expected_intent": "query"},
+    {"prompt": "include Psychology too", "category": "replacement", "expected_intent": "query"},
+
+    {"prompt": "show me all student emails and GPAs", "category": "privacy", "expected_intent": "query", "expected_requires_confirmation": false},
+    {"prompt": "export this list with emails", "category": "action", "expected_intent": "export", "expected_requires_confirmation": true},
+    {"prompt": "export this list", "category": "action", "expected_intent": "export", "expected_requires_confirmation": true},
+    {"prompt": "add note: advisor follow-up needed", "category": "action", "expected_intent": "note_edit"},
+    {"prompt": "set Follow Up Needed to Yes", "category": "action", "expected_intent": "field_update"},
+    {"prompt": "change their GPA to 4.0", "category": "action", "expected_intent": "field_update", "expected_validation": "failed"},
+
+    {"prompt": "what is their housing status", "category": "missing", "expected_intent": "clarify"},
+    {"prompt": "who has meal plan issues", "category": "missing", "expected_intent": "clarify"},
+
+    {"prompt": "who seems like they need advisor attention", "category": "rich", "expected_intent": "clarify"},
+    {"prompt": "which students look like they are slipping", "category": "rich", "expected_intent": "clarify"},
+    {"prompt": "find weird patterns in this file", "category": "rich", "expected_intent": "clarify"},
+    {"prompt": "which advisors are overloaded", "category": "rich", "expected_intent": "clarify"},
+    {"prompt": "give me a dean summary of the concerning groups", "category": "rich_grounded", "expected_intent": "query", "note": "rules map 'summary' to a data-quality summary"},
+    {"prompt": "who seems overloaded by advisor", "category": "rich_grounded", "expected_intent": "query", "note": "rules group by advisor (caseload)"},
+    {"prompt": "who is almost graduating but still at risk", "category": "rich_grounded", "expected_intent": "query", "note": "rules detect Academic Status = At Risk"}
+  ]
+}

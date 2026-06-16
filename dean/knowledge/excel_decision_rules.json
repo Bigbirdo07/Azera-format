@@ -1,0 +1,85 @@
+{
+  "description": "Decision rules used by the local Ollama planner to behave like an experienced Excel analyst. The planner consults these rules to translate phrasing into the right action and to decide when a single command is enough versus when a multi-step plan is needed. Rules are advisory — when a rule and a clarification need conflict, prefer to ask for clarification.",
+  "verb_to_action": [
+    {"verbs": ["show", "find", "pull", "list", "display", "give me"], "preferred_action": "filter_rows"},
+    {"verbs": ["highlight", "mark", "make stand out", "color", "shade"], "preferred_action": "highlight_rows"},
+    {"verbs": ["sort", "order", "rank"], "preferred_action": "sort_rows"},
+    {"verbs": ["sum", "total", "add up"], "preferred_action": "sum_column"},
+    {"verbs": ["average", "avg", "mean"], "preferred_action": "average_column"},
+    {"verbs": ["count", "how many", "number of"], "preferred_action": "count_rows"},
+    {"verbs": ["flag", "yes if", "mark with yes"], "preferred_action": "create_formula"},
+    {"verbs": ["match", "pull from another sheet", "lookup", "look up"], "preferred_action": "create_formula"},
+    {"verbs": ["chart", "graph", "plot", "visualize"], "preferred_action": "create_chart"},
+    {"verbs": ["report", "make a report", "summary report"], "preferred_action": "create_report"},
+    {"verbs": ["format", "make it look clean", "clean up the formatting"], "preferred_action": "format_report"},
+    {"verbs": ["audit", "check for problems", "data quality"], "preferred_action": "detect_missing_values"},
+    {"verbs": ["dedupe", "remove duplicates", "drop duplicates"], "preferred_action": "remove_duplicates"},
+    {"verbs": ["move to another sheet", "copy to a new tab"], "preferred_action": "move_rows_to_sheet"}
+  ],
+  "by_phrase_routing": {
+    "description": "Phrases like 'by program', 'by major', 'by department', 'by advisor' indicate grouped operations.",
+    "rules": [
+      {
+        "phrase_pattern": "totals by <category>",
+        "preferred_action": "sum_by_group"
+      },
+      {
+        "phrase_pattern": "how many by <category>",
+        "preferred_action": "count_by_group"
+      },
+      {
+        "phrase_pattern": "average by <category>",
+        "preferred_action": "average_column",
+        "with_group_by": true
+      },
+      {
+        "phrase_pattern": "breakdown by <category>",
+        "preferred_action": "count_by_group"
+      }
+    ]
+  },
+  "chart_rules": {
+    "description": "Charts always need a structured table before the chart command. If user asks for a chart without first specifying numeric metric, prefer count_rows.",
+    "rules": [
+      "Build the summary table first (sum_by_group, count_by_group, or average_column) and place it on its own sheet.",
+      "Then create_chart from that sheet, never from the raw enrollment sheet directly when a summary is needed.",
+      "Default chart type: bar.",
+      "If user says 'trend', use line chart and require a time/semester column."
+    ]
+  },
+  "report_rules": {
+    "description": "Reports are multi-step plans by default.",
+    "default_plan": [
+      "filter_rows (the relevant subset)",
+      "sum_by_group or count_by_group (the summary metric)",
+      "create_chart (optional, only if user asked for visualization or it is a standard playbook)",
+      "format_report (always last)"
+    ]
+  },
+  "formula_rules": {
+    "description": "Excel formula choice rules for create_formula.",
+    "rules": [
+      {"if_user_says": ["lookup", "look up", "pull from", "match"], "use_formula": "XLOOKUP", "fallback": "VLOOKUP"},
+      {"if_user_says": ["flag", "yes if", "mark"], "use_formula": "IF"},
+      {"if_user_says": ["sum if", "total where"], "use_formula": "SUMIF"},
+      {"if_user_says": ["count if", "count where"], "use_formula": "COUNTIF"},
+      {"if_user_says": ["combine", "concatenate", "join"], "use_formula": "CONCAT"},
+      {"if_user_says": ["unique", "distinct"], "use_formula": "UNIQUE"}
+    ]
+  },
+  "safety_rules": {
+    "description": "Hard rules the planner must never violate.",
+    "rules": [
+      "Never propose to delete original data by default — use move_rows_to_sheet (copy) instead of deleting.",
+      "Never overwrite the original workbook — output_sheet is always a new sheet.",
+      "Never invent column names — only use columns present in available_column_names_by_sheet.",
+      "Never invent sheet names — only use names in available_sheet_names.",
+      "Never include personally identifiable data in the plan output — refer to columns by name only.",
+      "Always set requires_confirmation to true unless plan_type is clarify."
+    ]
+  },
+  "clean_up_rule": {
+    "description": "When the user says 'clean it up' or 'clean this up', the planner must ask which kind of cleanup they want.",
+    "options": ["formatting", "duplicates", "missing values", "summary report"]
+  }
+}

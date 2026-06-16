@@ -1,0 +1,67 @@
+{
+  "description": "Rules that force the planner into 'clarify' mode rather than guessing. The planner must ask a focused question when any of these conditions are true. The clarification_question must be specific enough that the user can answer with a single phrase.",
+  "default_questions": {
+    "missing_action": "What would you like me to do with the data: filter, summarize, chart, or format?",
+    "missing_target_column": "Which column should I use for that?",
+    "missing_value": "What value should I compare against?",
+    "ambiguous_output": "Should the result be a filtered list, a summary table, a chart, or a formatted report?",
+    "ambiguous_clean_up": "What would you like me to clean up: formatting, duplicates, missing values, or create a summary report?",
+    "ambiguous_concept_mapping": "I see more than one column that could match. Which column should I use for '{user_phrase}': {candidates}?"
+  },
+  "trigger_rules": [
+    {
+      "rule": "vague_clean_up",
+      "match_phrases": ["clean it up", "clean this up", "tidy this", "fix this", "fix it", "make it nice"],
+      "ask": "ambiguous_clean_up",
+      "confidence_cap": 0.5
+    },
+    {
+      "rule": "vague_help",
+      "match_phrases": ["help me with this", "do something with this", "make this better", "improve this"],
+      "ask": "missing_action",
+      "confidence_cap": 0.45
+    },
+    {
+      "rule": "no_column_resolved",
+      "condition": "user_request mentions a metric but no column in the workbook matched",
+      "ask": "missing_target_column",
+      "confidence_cap": 0.5
+    },
+    {
+      "rule": "multiple_matching_columns",
+      "condition": "user concept matches two or more columns with similar score",
+      "ask": "ambiguous_concept_mapping",
+      "confidence_cap": 0.55,
+      "preferred_action": "column_mapping_request"
+    },
+    {
+      "rule": "operator_needs_value",
+      "condition": "user_request implies a comparison (greater than / less than / equals) but provides no value",
+      "ask": "missing_value",
+      "confidence_cap": 0.55
+    },
+    {
+      "rule": "ambiguous_output_intent",
+      "condition": "user_request could mean either a filtered list or a summary chart",
+      "ask": "ambiguous_output",
+      "confidence_cap": 0.6
+    }
+  ],
+  "examples": [
+    {
+      "user_request": "clean this up",
+      "plan_type": "clarify",
+      "clarification_question": "What would you like me to clean up: formatting, duplicates, missing values, or create a summary report?"
+    },
+    {
+      "user_request": "do something with these students",
+      "plan_type": "clarify",
+      "clarification_question": "What would you like me to do with the data: filter, summarize, chart, or format?"
+    },
+    {
+      "user_request": "show people above the cutoff",
+      "plan_type": "clarify",
+      "clarification_question": "Which column is the cutoff for, and what value should I use?"
+    }
+  ]
+}

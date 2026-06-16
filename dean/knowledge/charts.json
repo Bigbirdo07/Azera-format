@@ -1,0 +1,16 @@
+{
+  "supported_chart_types": {
+    "bar chart": "bar",
+    "column chart": "column",
+    "line chart": "line",
+    "pie chart": "pie",
+    "stacked bar chart": "stacked_bar"
+  },
+  "chart_triggers": ["chart", "graph", "plot", "trend", "visualize", "visualise"],
+  "default_chart_type": "bar",
+  "metric_triggers": {
+    "count_rows": ["students by", "count by", "counts by", "number by", "how many by"],
+    "count_missing": ["missing counts by", "missing count by", "blanks by", "blank counts by"],
+    "sum": ["total", "sum", "balance by", "balances by"]
+  }
+}

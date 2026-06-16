@@ -1,0 +1,198 @@
+{
+  "description": "Core Excel skills the local Ollama planner is expected to demonstrate. This is a reference manual for the planner about which Excel operations exist, what they look like in the command schema, and the typical use case. The planner does NOT execute these; it only emits JSON commands that the action engine executes.",
+  "skills": {
+    "filter_rows": {
+      "purpose": "Return only rows matching a set of conditions, written to a new sheet.",
+      "command_shape": {
+        "action": "filter_rows",
+        "sheet": "<source sheet>",
+        "conditions": [
+          {"column": "<column>", "operator": "<operator>", "value": "<value>"}
+        ],
+        "output_sheet": "<new sheet name>"
+      },
+      "good_example": "Filter Enrollment where FAFSA Status equals Missing and Balance Due > 0 into a sheet named 'Missing FAFSA With Balance'."
+    },
+    "highlight_rows": {
+      "purpose": "Color rows in place that match conditions. Use for emphasis, not extraction.",
+      "command_shape": {
+        "action": "highlight_rows",
+        "sheet": "<source sheet>",
+        "conditions": [{"column": "<column>", "operator": "<operator>", "value": "<value>"}],
+        "format": {"fill_color": "yellow"}
+      }
+    },
+    "sort_rows": {
+      "purpose": "Sort a sheet by one or more columns.",
+      "command_shape": {
+        "action": "sort_rows",
+        "sheet": "<source sheet>",
+        "sort_by": [{"column": "<column>", "direction": "asc"}],
+        "output_sheet": "<new sheet name (optional)>"
+      }
+    },
+    "sum_column": {
+      "purpose": "Sum a numeric column. Optionally group by a category.",
+      "command_shape": {
+        "action": "sum_column",
+        "sheet": "<source sheet>",
+        "column": "<numeric column>",
+        "group_by": "<optional category column>"
+      }
+    },
+    "average_column": {
+      "purpose": "Average a numeric column. Optionally group by a category.",
+      "command_shape": {
+        "action": "average_column",
+        "sheet": "<source sheet>",
+        "column": "<numeric column>",
+        "group_by": "<optional category column>"
+      }
+    },
+    "count_rows": {
+      "purpose": "Count rows, optionally filtered by conditions.",
+      "command_shape": {
+        "action": "count_rows",
+        "sheet": "<source sheet>",
+        "conditions": []
+      }
+    },
+    "count_by_group": {
+      "purpose": "Group rows by a column and count how many fall into each group.",
+      "command_shape": {
+        "action": "count_by_group",
+        "sheet": "<source sheet>",
+        "group_by": "<category column>",
+        "output_sheet": "<summary sheet name>"
+      }
+    },
+    "sum_by_group": {
+      "purpose": "Group rows by a category and sum a numeric column within each group.",
+      "command_shape": {
+        "action": "sum_by_group",
+        "sheet": "<source sheet>",
+        "group_by": "<category column>",
+        "sum_column": "<numeric column>",
+        "output_sheet": "<summary sheet name>"
+      }
+    },
+    "create_formula": {
+      "purpose": "Write a calculated column or cell-level formula. Supported types include SUM, AVERAGE, COUNT, COUNTIF, SUMIF, IF, IFS, XLOOKUP, VLOOKUP, FILTER, SORT, UNIQUE, CONCAT.",
+      "command_shape_examples": [
+        {
+          "action": "create_formula",
+          "sheet": "Enrollment",
+          "formula_type": "IF",
+          "new_column": "Owes Balance Flag",
+          "logic": {
+            "condition_column": "Balance Due",
+            "operator": "greater_than",
+            "value": 0,
+            "true_value": "Yes",
+            "false_value": "No"
+          }
+        },
+        {
+          "action": "create_formula",
+          "sheet": "Enrollment",
+          "formula_type": "XLOOKUP",
+          "new_column": "Advisor From Roster",
+          "lookup": {
+            "lookup_sheet": "Advisors",
+            "lookup_value_column": "Student ID",
+            "lookup_key_column": "Student ID",
+            "return_column": "Advisor"
+          }
+        }
+      ]
+    },
+    "create_chart": {
+      "purpose": "Build a chart from a summary table. Always create the summary first.",
+      "command_shape": {
+        "action": "create_chart",
+        "sheet": "<sheet that holds the summary table>",
+        "chart_type": "bar | column | line | pie | stacked_bar",
+        "category_column": "<category column>",
+        "value_column": "<value column>",
+        "title": "<chart title>"
+      }
+    },
+    "create_report": {
+      "purpose": "Build a named report. Typically returned as a multi-step plan rather than a single command.",
+      "command_shape": {
+        "action": "create_report",
+        "sheet": "<source sheet>",
+        "report_type": "<one of enrollment_summary, missing_fafsa, outstanding_balance, inactive_withdrawn, program_enrollment, advisor_caseload, registration_status, missing_fafsa_and_balance>",
+        "output_sheet": "<output sheet name>"
+      }
+    },
+    "format_report": {
+      "purpose": "Apply Excel formatting (column widths, header style, number formats) to one or more sheets.",
+      "command_shape": {
+        "action": "format_report",
+        "sheets": ["<sheet 1>", "<sheet 2>"]
+      }
+    },
+    "detect_missing_values": {
+      "purpose": "Identify blanks, missing FAFSA, missing advisor, etc. and write the result to a new sheet.",
+      "command_shape": {
+        "action": "detect_missing_values",
+        "sheet": "<source sheet>",
+        "column": "<column to inspect, optional>",
+        "output_sheet": "<new sheet name>"
+      }
+    },
+    "remove_duplicates": {
+      "purpose": "Remove duplicate rows based on the listed key columns. Never silently delete originals — write deduped copy to output_sheet.",
+      "command_shape": {
+        "action": "remove_duplicates",
+        "sheet": "<source sheet>",
+        "columns": ["<key column>"],
+        "output_sheet": "<new sheet name>"
+      }
+    },
+    "move_rows_to_sheet": {
+      "purpose": "Copy rows matching conditions into a new sheet. Never deletes from the source — copies only.",
+      "command_shape": {
+        "action": "move_rows_to_sheet",
+        "sheet": "<source sheet>",
+        "conditions": [{"column": "<column>", "operator": "<operator>", "value": "<value>"}],
+        "output_sheet": "<new sheet name>"
+      }
+    },
+    "create_summary_sheet": {
+      "purpose": "Build a multi-metric summary sheet (total counts, totals, missing counts) in one place.",
+      "command_shape": {
+        "action": "create_summary_sheet",
+        "sheet": "<source sheet>",
+        "metrics": [
+          {"label": "<label>", "kind": "count | sum | count_missing", "column": "<column if needed>"}
+        ],
+        "output_sheet": "<new sheet name>"
+      }
+    },
+    "column_mapping_request": {
+      "purpose": "Ask the user to confirm or pick a column when the planner can't safely resolve a concept (e.g., user said 'major' but the workbook has both 'Program' and 'Department').",
+      "command_shape": {
+        "action": "column_mapping_request",
+        "concept": "<concept key, e.g., balance_due>",
+        "candidates": ["<column option 1>", "<column option 2>"],
+        "user_phrase": "<the exact word the user used>"
+      }
+    }
+  },
+  "operators": [
+    "equals",
+    "not_equals",
+    "greater_than",
+    "greater_or_equal",
+    "less_than",
+    "less_or_equal",
+    "contains",
+    "contains_any",
+    "in",
+    "not_contains",
+    "is_missing",
+    "is_not_missing"
+  ]
+}

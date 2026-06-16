@@ -1,0 +1,32 @@
+{
+  "supported_formulas": [
+    "SUM",
+    "AVERAGE",
+    "COUNT",
+    "COUNTA",
+    "COUNTIF",
+    "COUNTIFS",
+    "SUMIF",
+    "SUMIFS",
+    "IF",
+    "IFS",
+    "XLOOKUP",
+    "VLOOKUP",
+    "FILTER",
+    "SORT",
+    "UNIQUE",
+    "CONCAT",
+    "TEXT",
+    "TODAY"
+  ],
+  "formula_modes": {
+    "new_column": ["IF", "IFS", "XLOOKUP", "VLOOKUP", "CONCAT", "TEXT", "TODAY"],
+    "summary_sheet": ["SUM", "AVERAGE", "COUNT", "COUNTA", "COUNTIF", "COUNTIFS", "SUMIF", "SUMIFS", "FILTER", "SORT", "UNIQUE", "TODAY"]
+  },
+  "natural_language_triggers": {
+    "create_formula": ["add a column", "new column", "formula", "calculate", "lookup", "flag", "says yes", "says no"],
+    "if_flag": ["if", "flag", "says yes", "yes if", "no if"],
+    "lookup": ["lookup", "look up", "match from", "pull from", "bring in"],
+    "summary": ["summary", "summarize", "formula summary"]
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "concept_defaults": {
+    "balance_due": {
+      "operator": "greater_than",
+      "value": 0
+    },
+    "fafsa_status": {
+      "operator": "is_missing"
+    },
+    "advisor": {
+      "operator": "is_missing"
+    },
+    "enrollment_status:not_registered": {
+      "operator": "contains",
+      "value": "not registered"
+    },
+    "enrollment_status:active": {
+      "operator": "equals",
+      "value": "active"
+    }
+  },
+  "status_terms": {
+    "not_registered": ["not registered", "unregistered", "not enrolled", "not register"],
+    "active": ["active", "currently active", "enrolled"]
+  },
+  "missing_terms": ["missing", "blank", "blanks", "empty", "no ", "without", "null"]
+}
