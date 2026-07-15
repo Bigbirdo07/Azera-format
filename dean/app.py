@@ -1933,6 +1933,15 @@ def main() -> None:
     if settings.get("strict_privacy_mode", True):
         settings = {**settings, "use_local_llm": False, "llm_explanations_enabled": False}
 
+    # Warm the local model once per session so the first question doesn't eat the
+    # 25-40s cold-start. Backgrounded and best-effort; skipped when the local LLM
+    # is off (including under strict privacy, handled just above).
+    if settings.get("use_local_llm") and not st.session_state.get("_ollama_warmed"):
+        from nlp.local_model import warm_model
+
+        warm_model(settings.get("ollama_model") or settings.get("planner_model") or "llama3.2:3b")
+        st.session_state["_ollama_warmed"] = True
+
     # The active sheet (the one the chat planner runs queries against) is the
     # last source sheet the user picked. Generated and chart sheets are views
     # only — they never become the planner's target.

@@ -39,5 +39,8 @@
   "benchmark_status": ["benchmark status", "benchmark met", "college readiness benchmark", "readiness status", "below benchmark"],
   "college_readiness": ["college readiness", "college ready", "readiness level"],
   "assessment_risk": ["assessment risk", "testing risk", "below benchmark", "benchmark risk"],
-  "attendance_category": ["attendance category", "attendance categories", "attendance status", "attendance statuses"]
+  "attendance_category": ["attendance category", "attendance categories", "attendance status", "attendance statuses"],
+  "conduct_status": ["conduct status", "conduct", "discipline record", "discipline records", "discipline information", "discipline incidents", "discipline incident", "behavior incidents", "behavior incident", "office referral", "office referrals", "suspensions", "suspension", "expulsion", "expulsions", "infractions", "infraction"],
+  "grad_year": ["grad year", "graduation year", "expected graduation", "class of"],
+  "emergency_contact": ["emergency contact", "emergency contacts", "emergency contact name", "emergency contact phone"]
 }

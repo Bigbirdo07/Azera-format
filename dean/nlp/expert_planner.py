@@ -55,7 +55,7 @@ from nlp.local_model import (
     plan_from_local_model,
 )
 from nlp.rule_parser import ParseResult, parse_request
-from nlp.synonym_mapper import load_json, match_column_for_concept
+from nlp.synonym_mapper import load_json, load_synonyms_with_learned, match_column_for_concept
 
 
 RULE_CONFIDENCE_THRESHOLD = 0.75
@@ -185,7 +185,7 @@ def _resolve_concepts(columns: list[str]) -> dict[str, str]:
 
     Returns ONLY a {concept: column_name} dictionary — no spreadsheet values.
     """
-    synonyms = load_json("synonyms.json")
+    synonyms = load_synonyms_with_learned()
     mapped: dict[str, str] = {}
     for concept in [
         "balance_due",

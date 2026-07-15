@@ -2,7 +2,7 @@
 (generic reads -> code analyst; specialized ops -> deterministic dispatcher;
 charts -> figure path) and grade against computed ground truth."""
 from __future__ import annotations
-import sys, re
+import sys, re, os, time
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import pandas as pd
@@ -30,7 +30,8 @@ enriched = LoadedWorkbook(file_name=loaded.file_name, workbook=loaded.workbook, 
 sheet_columns = {n: list(f.columns) for n,f in sheets.items()}
 settings = {"use_local_llm": True, "llm_enabled": True, "strict_privacy_mode": False,
             "code_analyst_enabled": True, "planner_model": "llama3.2:3b", "planner_timeout_seconds": 300}
-call = default_llm_call("llama3.2:3b", timeout=200)
+MODEL = os.environ.get("PILOT_MODEL", "llama3.2:3b")
+call = default_llm_call(MODEL, timeout=200)
 g = pd.to_numeric(df["GPA"], errors="coerce")
 
 # (question, ground-truth-note or None)
@@ -82,11 +83,21 @@ def route_and_answer(q):
     except Exception as e:
         return f"TOOL:{op}", f"(dispatch error: {e})"
 
+print(f"=== MODEL: {MODEL} ===")
+correct = graded = 0
+analyst_time = 0.0
 for i,(q,truth) in enumerate(QS,1):
+    t0 = time.monotonic()
     kind, ans = route_and_answer(q)
+    dt = time.monotonic() - t0
+    if kind == "ANALYST":
+        analyst_time += dt
     verdict = ""
     if truth and not truth.startswith("["):
-        verdict = "  ✓" if truth.lower() in ans.lower() else f"  ✗ expected~{truth}"
+        graded += 1
+        ok = truth.lower() in ans.lower()
+        correct += ok
+        verdict = "  ✓" if ok else f"  ✗ expected~{truth}"
     print(f"\nQ{i:>2}. {q}")
-    print(f"     -> [{kind}] {ans}{verdict}")
-print("\n=== pilot done ===")
+    print(f"     -> [{kind}] {ans}{verdict}   ({dt:.1f}s)")
+print(f"\n=== {MODEL}: {correct}/{graded} graded correct | analyst wall-time {analyst_time:.0f}s ===")

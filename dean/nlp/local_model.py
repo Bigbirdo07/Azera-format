@@ -225,7 +225,7 @@ def classify_intent_with_model(
         sheet_names=sheet_names,
         sheet_columns=sheet_columns,
     )
-    raw, error = _call_ollama(prompt, model_name, num_ctx=SHORT_NUM_CTX)
+    raw, error = _call_ollama(prompt, model_name, num_ctx=SHORT_NUM_CTX, num_predict=SHORT_NUM_PREDICT)
     if error or raw is None:
         return IntentResult(None, 0.0, error=error)
     try:
@@ -296,7 +296,7 @@ def explain_result_with_model(
         user_question=user_question,
         verified_result=verified_result,
     )
-    raw, error = _call_ollama(prompt, model_name, json_mode=False, num_ctx=SHORT_NUM_CTX)
+    raw, error = _call_ollama(prompt, model_name, json_mode=False, num_ctx=SHORT_NUM_CTX, num_predict=SHORT_NUM_PREDICT)
     if error or raw is None:
         return None, error
     return raw.strip(), None
@@ -435,7 +435,7 @@ def converse_about_result_with_model(
         row_sample=row_sample,
         row_sample_policy=row_sample_policy,
     )
-    raw, error = _call_ollama(prompt, model_name, json_mode=False, num_ctx=SHORT_NUM_CTX)
+    raw, error = _call_ollama(prompt, model_name, json_mode=False, num_ctx=SHORT_NUM_CTX, num_predict=SHORT_NUM_PREDICT)
     if error or raw is None:
         return None, error
     reply = raw.strip()
@@ -459,6 +459,17 @@ SHORT_NUM_CTX = 2048
 explanation). Keeping these calls small frees ~500 MB of KV cache per call
 on Apple Silicon when the model is loaded with default keep_alive=5m."""
 
+PLANNER_NUM_PREDICT = 1024
+"""Hard ceiling on tokens the model may generate for a planner/code reply.
+Without a cap, a small model that starts repeating itself will stream until the
+300s timeout while holding the in-flight lock — which looks exactly like a
+freeze. A validated plan or pandas snippet fits comfortably under 1024 tokens."""
+
+SHORT_NUM_PREDICT = 384
+"""Output ceiling for the short calls (intent JSON, 1-3 sentence narrator,
+plain-English explanation). These never need to be long; capping them tightly
+bounds worst-case latency."""
+
 
 def _call_ollama(
     prompt: str,
@@ -466,6 +477,7 @@ def _call_ollama(
     timeout: int = OLLAMA_TIMEOUT_SECONDS,
     json_mode: bool = True,
     num_ctx: int = PLANNER_NUM_CTX,
+    num_predict: int = PLANNER_NUM_PREDICT,
 ) -> tuple[str | None, str | None]:
     payload = {
         "model": model_name,
@@ -474,6 +486,7 @@ def _call_ollama(
         "options": {
             "temperature": 0,
             "num_ctx": num_ctx,
+            "num_predict": num_predict,
         },
     }
     if json_mode:
@@ -500,3 +513,48 @@ def _call_ollama(
     if not text:
         return None, "Local Ollama returned an empty response."
     return text, None
+
+
+# How long Ollama keeps the warmed model resident after the warm-up ping. Long
+# enough to cover a user reading the screen / uploading a workbook before they
+# ask their first question; real queries refresh this each time they run.
+WARM_KEEP_ALIVE = "15m"
+
+
+def warm_model(model_name: str, timeout: int = OLLAMA_TIMEOUT_SECONDS) -> None:
+    """Fire-and-forget: ask Ollama to load the model into memory now so the first
+    real question doesn't pay the 25-40s cold-start.
+
+    Runs on a daemon thread and never raises: if Ollama is offline, the model is
+    missing, or the loopback check fails, warming is silently skipped and the app
+    falls back to its normal cold-start-then-rule-parser behavior. It does NOT
+    take the in-flight lock — a 1-token generate is cheap, and holding the lock
+    through the model load would needlessly bounce a concurrent first question to
+    the rule parser.
+    """
+
+    def _run() -> None:
+        try:
+            assert_loopback_url(OLLAMA_URL)
+        except PrivacyGuardError:
+            return
+        payload = {
+            "model": model_name,
+            "prompt": "ok",
+            "stream": False,
+            "keep_alive": WARM_KEEP_ALIVE,
+            "options": {"temperature": 0, "num_predict": 1},
+        }
+        try:
+            request = urllib.request.Request(
+                f"{OLLAMA_URL}/api/generate",
+                data=json.dumps(payload).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                response.read()
+        except Exception:
+            pass  # offline / model missing — warming is best-effort
+
+    threading.Thread(target=_run, name="ollama-warm", daemon=True).start()

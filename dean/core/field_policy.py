@@ -78,6 +78,10 @@ _PROTECTED_CANONICALS = {
     "reading_writing_score",
     "total_score",
     "benchmark_status",
+    # Skyward-export contact/identity fields.
+    "home_address",
+    "mailing_address",
+    "emergency_contact",
 }
 
 

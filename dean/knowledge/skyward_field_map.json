@@ -1,0 +1,50 @@
+{
+  "_meta": {
+    "purpose": "Maps fields confirmed in Skyward's Standards Gradebook Teacher Guide (Class Roster and Student Information reports) to Dean's canonical concepts. Built from the teacher-facing UI manual, not a real data export -- verify every row against an actual anonymized export file before trusting it in production.",
+    "source": "skyward/Standards_Gradebook_Teacher_Guide.pdf (Class Roster p.168-169, Student Information p.171-172)",
+    "status_meanings": {
+      "mapped": "canonical field exists in core/schema.py and/or knowledge/synonyms.json",
+      "needs_join": "field is per-course or per-record (schedule, discipline, academic history) -- a flat one-row-per-student sheet cannot represent it without a join or a sibling sheet",
+      "unresolved": "not yet given a canonical mapping; low analytical value or too shape-dependent to model blind"
+    }
+  },
+  "class_roster_report": [
+    {"skyward_field": "Name (Last/First/MI)", "canonical": "full_name", "status": "mapped"},
+    {"skyward_field": "Student ID / Internal ID / Name Key", "canonical": "student_id", "status": "mapped"},
+    {"skyward_field": "Grade", "canonical": "year", "status": "mapped"},
+    {"skyward_field": "Grad Year", "canonical": "grad_year", "status": "mapped", "note": "added in this pass"},
+    {"skyward_field": "Birth Date", "canonical": "date_of_birth", "status": "mapped"},
+    {"skyward_field": "Gender", "canonical": null, "status": "unresolved", "note": "no analytic use case yet; add only if a real question needs it"},
+    {"skyward_field": "Phone / Second Phone / Third Phone", "canonical": "phone", "status": "mapped"},
+    {"skyward_field": "Email", "canonical": "email", "status": "mapped"},
+    {"skyward_field": "Home Address / Mailing Address", "canonical": "home_address / mailing_address", "status": "mapped", "note": "added in this pass; sensitive by default via core/privacy.py contact keywords"},
+    {"skyward_field": "Current Cumulative GPA", "canonical": "cumulative_gpa", "status": "mapped"},
+    {"skyward_field": "Advisor", "canonical": "advisor", "status": "mapped"},
+    {"skyward_field": "Primary Guardian / All Guardians (name, phone, email, address)", "canonical": "parent_guardian_contact", "status": "mapped"},
+    {"skyward_field": "Food Service Key Pad #", "canonical": null, "status": "unresolved", "note": "no analytic use case"}
+  ],
+  "student_information_report": [
+    {"skyward_field": "Student Profile Information (demographics, alerts)", "canonical": "partially mapped (date_of_birth, home_address)", "status": "mapped"},
+    {"skyward_field": "Family Member Information", "canonical": "parent_guardian_contact", "status": "mapped"},
+    {"skyward_field": "Attendance Totals (Excused/Unexcused/Tardy/Other, by term or date range)", "canonical": "attendance_rate, days_absent, days_tardy, excused_absences, unexcused_absences", "status": "mapped", "note": "Skyward tracks 4 distinct absence categories, not one rate -- confirm the real export's column granularity before assuming a single 'Attendance Rate' number exists"},
+    {"skyward_field": "Current Schedule (courses + periods + teachers)", "canonical": "course, teacher", "status": "needs_join", "note": "CRITICAL: this is one-to-many (student -> multiple courses -> each with its own teacher). A flat roster sheet cannot answer 'which teacher is performing well' unless a schedule/grades sheet keyed by student+course is also present and joinable. Confirm with counselor whether their export includes this or only the roster-level Class Roster fields."},
+    {"skyward_field": "Course Add/Drop", "canonical": "entry_date / withdrawal_date (course-level)", "status": "needs_join", "note": "per-course, same join dependency as Current Schedule"},
+    {"skyward_field": "Discipline Information (offenses + actions)", "canonical": "conduct_status", "status": "mapped", "note": "distinct from the 'discipline' concept (= academic department/field of study) used by College/University question-library entries -- see conduct_status entry in knowledge/synonyms.json. Real column header will likely be literally 'Discipline Information'; core/privacy.py now flags that as sensitive (previously it would have slipped through unredacted)."},
+    {"skyward_field": "Academic History (prior years' courses/grades)", "canonical": null, "status": "needs_join", "note": "multi-year, per-course -- out of scope for a single current-term roster sheet"},
+    {"skyward_field": "Current Grades (per course, + Teacher Comments + Cumulative GPA)", "canonical": "cumulative_gpa mapped; per-course grade needs_join", "status": "needs_join"},
+    {"skyward_field": "Test Scores (standardized tests, incl. SAT/PSAT)", "canonical": "sat_math, sat_ebrw, sat_total, psat_math, psat_reading_writing, psat_total, benchmark fields", "status": "mapped", "note": "already covered by existing PSAT/SAT canonical fields; confirm the real export's column labels match (e.g. 'SAT Math' vs 'SAT - Math Score')"},
+    {"skyward_field": "Course Recommendations", "canonical": null, "status": "unresolved"},
+    {"skyward_field": "Activities", "canonical": null, "status": "unresolved"},
+    {"skyward_field": "Message Center (Family/Student Access messages)", "canonical": null, "status": "unresolved", "note": "not a data field a counselor would export for analysis"},
+    {"skyward_field": "Entry/Withdrawal", "canonical": "entry_date / withdrawal_date", "status": "mapped", "note": "added in this pass"},
+    {"skyward_field": "Emergency Contacts", "canonical": "emergency_contact", "status": "mapped", "note": "added in this pass; sensitive by default via core/privacy.py contact keywords"},
+    {"skyward_field": "Picture", "canonical": null, "status": "unresolved", "note": "binary/image data, not relevant to a query planner"},
+    {"skyward_field": "Student Access Login and Password", "canonical": null, "status": "unresolved", "note": "should never appear in an analytic export; flag as sensitive if it ever does"}
+  ],
+  "open_questions_for_real_export": [
+    "Is the export one flat sheet (roster-level, one row per student) or does it include a schedule/grades sheet keyed by student+course? This determines whether 'which teacher is performing well' is answerable at all.",
+    "Is Attendance a single rate/percentage column, or the four raw category counts (Excused/Unexcused/Tardy/Other) that Skyward actually tracks?",
+    "What are the literal column header strings? (e.g. 'GPA' vs 'Current Cumulative GPA' vs 'Cum GPA') -- core/schema.py's phrase matching needs the real headers to validate against, not guessed ones.",
+    "Does the export include Discipline Information at all, or is that pulled separately (it's a security-gated report in Skyward)?"
+  ]
+}

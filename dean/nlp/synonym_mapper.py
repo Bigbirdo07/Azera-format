@@ -26,6 +26,48 @@ def load_json_list(file_name: str) -> list[dict[str, Any]]:
     return data if isinstance(data, list) else []
 
 
+def load_learned_synonym_map(file_name: str = "learned_synonyms.json") -> dict[str, list[str]]:
+    """Shape the user's learned corrections like synonyms.json: concept -> phrases.
+
+    The learning store (core.correction_manager) records corrections as a flat
+    list of ``{"phrase", "mapped_concept", ...}`` rows. This regroups them by
+    concept so they can be merged into the base synonym map. Returns ``{}`` when
+    nothing has been learned yet, which makes every caller a no-op until the
+    user actually teaches the app something.
+    """
+    mapped: dict[str, list[str]] = {}
+    for item in load_json_list(file_name):
+        if not isinstance(item, dict):
+            continue
+        phrase = str(item.get("phrase", "")).strip()
+        concept = str(item.get("mapped_concept", "")).strip()
+        if phrase and concept:
+            bucket = mapped.setdefault(concept, [])
+            if phrase not in bucket:
+                bucket.append(phrase)
+    return mapped
+
+
+def load_synonyms_with_learned(file_name: str = "synonyms.json") -> dict[str, list[str]]:
+    """Base synonyms merged with the user's learned corrections.
+
+    Purely additive: learned phrases are appended to the matching concept (or
+    create a new concept) and nothing is ever removed, so with an empty learning
+    store the result is identical to ``load_json(file_name)``. This is the single
+    seam that lets captured corrections reach the planner and every matcher.
+    """
+    synonyms = load_json(file_name)
+    if not isinstance(synonyms, dict):
+        return synonyms
+    merged = {concept: list(phrases) for concept, phrases in synonyms.items()}
+    for concept, phrases in load_learned_synonym_map().items():
+        bucket = merged.setdefault(concept, [])
+        for phrase in phrases:
+            if phrase not in bucket:
+                bucket.append(phrase)
+    return merged
+
+
 def normalize_text(value: str) -> str:
     text = str(value).lower()
     # Preserve decimal points between digits so "2.5" survives normalization.

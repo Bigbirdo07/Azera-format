@@ -123,10 +123,15 @@ def friendly_validation_error(exc_message: Any, columns: list[str], sheets: list
 # trend_summary, advisor_outcome_summary, data_quality_summary, …) is a
 # purpose-built specialist and stays on the deterministic dispatcher. Allowlist,
 # not denylist, so new specialized operations default to the deterministic path.
+# Generic reads we let the (opt-in) LLM analyst answer. Deliberately EXCLUDES the
+# groupby/ranking ops: the deterministic query engine (core.query_engine.run_query)
+# computes "which group has the highest/lowest <agg>" exactly via idxmax/idxmin and
+# names the winner, whereas llama3.2:3b reliably mis-ranks or blanks on these
+# (dean_eval.py groupby category: 3/7 on the LLM vs 7/7 deterministic). Ranking is
+# structured, not open-ended, so the tested engine wins — see docs/llm_improvement_log.md.
 _ANALYST_GENERIC_OPS = frozenset({
     "filtered_preview", "count_rows", "count_unique", "list_unique",
     "average_column", "sum_column", "min_column", "max_column",
-    "groupby_count", "groupby_sum", "groupby_average",
 })
 
 

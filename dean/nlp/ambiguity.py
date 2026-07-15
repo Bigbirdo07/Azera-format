@@ -29,6 +29,7 @@ from typing import Any
 
 from nlp.synonym_mapper import (
     load_json,
+    load_synonyms_with_learned,
     match_column_for_concept_with_fallback,
     normalize_text,
 )
@@ -106,7 +107,7 @@ def detect_ambiguity(
     school-roster ambiguity patterns. Otherwise return None and let the
     normal planner handle the request."""
     if synonyms is None:
-        synonyms = load_json("synonyms.json")
+        synonyms = load_synonyms_with_learned()
     text = normalize_text(user_request)
 
     container = _detect_container_vs_aggregate(text, sheet, columns, synonyms)

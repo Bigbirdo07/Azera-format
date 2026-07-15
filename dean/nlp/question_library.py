@@ -27,6 +27,7 @@ from typing import Any, Iterable
 from nlp.synonym_mapper import (
     KNOWLEDGE_DIR,
     load_json,
+    load_synonyms_with_learned,
     match_column_by_terms,
     match_column_for_concept,
     normalize_text,
@@ -145,7 +146,7 @@ def askable_categories(
     Categories with no surviving questions are dropped entirely.
     """
     if synonyms is None:
-        synonyms = load_json("synonyms.json")
+        synonyms = load_synonyms_with_learned()
     cats = library if library is not None else load_library()
     askable: list[AskableCategory] = []
     for category in cats:

@@ -27,6 +27,7 @@ from typing import Any
 
 from nlp.synonym_mapper import (
     load_json,
+    load_synonyms_with_learned,
     match_column_for_concept_with_fallback,
     normalize_text,
 )
@@ -314,7 +315,7 @@ def _resolve_to_column(target_phrase: str, columns: list[str]) -> str | None:
         if normalize_text(column) == needle:
             return column
     # Synonym / fallback resolution.
-    synonyms = load_json("synonyms.json")
+    synonyms = load_synonyms_with_learned()
     column, _score, _fallback_from = match_column_for_concept_with_fallback(
         needle.replace(" ", "_"), columns, synonyms,
     )

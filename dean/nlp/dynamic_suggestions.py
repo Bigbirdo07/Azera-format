@@ -18,7 +18,7 @@ from typing import Iterable
 import pandas as pd
 
 from nlp.question_library import Question
-from nlp.synonym_mapper import load_json, match_column_for_concept
+from nlp.synonym_mapper import load_json, load_synonyms_with_learned, match_column_for_concept
 from core.institution_context import InstitutionMode, Role, role_prompt_snippets
 
 
@@ -81,7 +81,7 @@ def build_dynamic_suggestions(
     """
     if not columns:
         return []
-    synonyms = synonyms if synonyms is not None else load_json("synonyms.json")
+    synonyms = synonyms if synonyms is not None else load_synonyms_with_learned()
 
     column_set = set(columns)
     resolved: dict[str, str] = {}

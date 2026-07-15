@@ -15,7 +15,8 @@ from nlp.synonym_mapper import normalize_text
 
 # sensitivity_type -> keywords that appear in a column name.
 _SENSITIVITY_KEYWORDS: dict[str, tuple[str, ...]] = {
-    "contact": ("email", "e mail", "phone", "mobile", "cell", "address", "zip", "postal"),
+    "contact": ("email", "e mail", "phone", "mobile", "cell", "address", "zip", "postal",
+                "contact", "guardian", "emergency", "parent"),
     "financial": ("financial aid", "fafsa", "aid", "scholarship", "balance", "tuition", "payment", "loan", "grant"),
     "disciplinary": ("disciplinary", "discipline", "conduct", "infraction", "suspension", "expulsion"),
     "health": ("medical", "disability", "accommodation", "health", "mental"),
@@ -41,7 +42,16 @@ def classify_sensitivity(column_name: str) -> tuple[bool, str]:
         for keyword in _SENSITIVITY_KEYWORDS[sensitivity_type]:
             if keyword in normalized:
                 if sensitivity_type == "disciplinary" and keyword == "discipline":
-                    if not any(ind in normalized for ind in ("status", "record", "conduct", "infraction", "action", "warning", "probation")):
+                    # Bare "Discipline" alone is the dean-office word for academic
+                    # department (see nlp/synonym_mapper concept aliases); only
+                    # treat it as sensitive when the header also carries a
+                    # behavioral-record indicator. Skyward's own field is literally
+                    # named "Discipline Information".
+                    if not any(ind in normalized for ind in (
+                        "status", "record", "conduct", "infraction", "action",
+                        "warning", "probation", "information", "incident",
+                        "referral", "offense",
+                    )):
                         continue
                 return True, sensitivity_type
     return False, "unknown"

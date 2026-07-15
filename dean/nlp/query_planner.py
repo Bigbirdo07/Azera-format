@@ -16,6 +16,7 @@ from core.schema import _FREE_TEXT_NAME_PATTERNS
 from nlp.local_model import plan_query_from_local_model
 from nlp.synonym_mapper import (
     load_json,
+    load_synonyms_with_learned,
     match_column_by_terms,
     match_column_for_concept,
     match_column_for_concept_with_fallback,
@@ -122,7 +123,7 @@ def plan_query(
 
 def _rule_plan(user_request: str, sheet: str, columns: list[str], frame=None) -> QueryPlanResult | None:
     text = normalize_text(user_request)
-    synonyms = load_json("synonyms.json")
+    synonyms = load_synonyms_with_learned()
     if (
         ("academic watch" in text or "attendance watch" in text)
         and not _watch_column_available(text, columns)

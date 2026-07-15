@@ -58,10 +58,20 @@ CANONICAL_FIELDS: list[tuple[str, tuple[str, ...]]] = [
     ("graduation_status", ("graduation status", "grad status", "graduated")),
     ("enrollment_status", ("enrollment status", "registration status", "enrolled", "registered")),
     ("financial_aid_status", ("financial aid status", "financial aid", "fafsa", "aid status")),
-    ("conduct_status", ("conduct status", "conduct", "disciplinary status", "discipline")),
+    ("conduct_status", ("conduct status", "conduct", "disciplinary status", "discipline",
+                        "discipline information", "discipline record", "discipline incidents",
+                        "behavior incidents", "office referrals")),
     ("notes", ("notes", "note", "comments", "remarks")),
     ("date_of_birth", ("date of birth", "dob", "birth date", "birthdate")),
     ("school", ("school", "college")),
+    # Skyward-export fields (Class Roster / Student Information reports).
+    ("grad_year", ("grad year", "graduation year", "grad yr", "expected graduation")),
+    ("entry_date", ("entry date", "enrollment date", "date enrolled", "start date")),
+    ("withdrawal_date", ("withdrawal date", "exit date", "date withdrawn", "dropped date")),
+    ("home_address", ("home address",)),
+    ("mailing_address", ("mailing address",)),
+    ("emergency_contact", ("emergency contact", "emergency contact name",
+                          "emergency contact phone", "emergency contacts")),
     # Attendance-derived (read-only) metrics. Variants here are exhaustive so
     # a school that exports "Attendance %", "Total Absences", or "Tardies"
     # gets recognised without the user having to rename anything.

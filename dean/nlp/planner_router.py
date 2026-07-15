@@ -19,7 +19,7 @@ import pandas as pd
 from core.field_policy import field_status
 from core.llm_config import from_app_settings
 from core.privacy import is_hidden_by_default, requested_sensitive_columns
-from core.schema import canonical_map, infer_column_types
+from core.schema import canonical_for, canonical_map, infer_column_types
 from nlp.conversation import (
     FOLLOWUP,
     classify_context_action,
@@ -50,7 +50,7 @@ from nlp.request_intents import (
     parse_note,
 )
 from nlp.suggestions import suggest_next_moves
-from nlp.synonym_mapper import load_json, match_column_for_concept, normalize_text
+from nlp.synonym_mapper import load_json, load_synonyms_with_learned, match_column_for_concept, normalize_text
 from nlp.uncertainty import (
     HIGH_CONFIDENCE,
     MEDIUM_CONFIDENCE,
@@ -486,8 +486,25 @@ def _workbook_tool_query(message: str, sheet: str, columns: list[str]) -> dict[s
     text = normalize_text(message or "")
     if not text:
         return None
-    if "pivot" in text:
+    explicit_pivot_language = bool(
+        re.search(r"\b(?:pivot|cross ?tab|crosstab|matrix)\b", text)
+        or re.search(r"\bbreak(?:s|ing)?\s*down\b", text)
+    )
+    trend_language = bool(re.search(r"\b(?:trend|trends|pattern|patterns|outlier|outliers)\b", text))
+    if explicit_pivot_language:
         pivot = _parse_pivot_request(text, sheet, columns)
+        if pivot is not None:
+            return pivot
+    elif not trend_language:
+        # No pivot-specific vocabulary, but a genuine two-dimension cross-tab
+        # ("average GPA by teacher and grade level") deserves the same
+        # deterministic engine. Require both dimensions to resolve to real,
+        # distinct, non-metric columns -- no guessed fallback -- so this never
+        # hijacks an ordinary single-group "by X" question, which the
+        # groupby planner already handles. Trend language is excluded so
+        # "show trends by major and location" still reaches trend_summary
+        # below instead of being read as a two-dimension pivot.
+        pivot = _parse_pivot_request(text, sheet, columns, strict=True)
         if pivot is not None:
             return pivot
     if re.search(r"\b(?:trend|trends|pattern|patterns|outlier|outliers)\b", text):
@@ -508,7 +525,9 @@ def _workbook_tool_query(message: str, sheet: str, columns: list[str]) -> dict[s
     return None
 
 
-def _parse_pivot_request(text: str, sheet: str, columns: list[str]) -> dict[str, Any] | None:
+def _parse_pivot_request(
+    text: str, sheet: str, columns: list[str], *, strict: bool = False,
+) -> dict[str, Any] | None:
     value_column = _metric_column_from_text(text, columns)
     metric = "average" if re.search(r"\b(?:average|avg|mean)\b", text) and value_column else "count"
     if re.search(r"\b(?:sum|total)\b", text) and value_column:
@@ -546,15 +565,30 @@ def _parse_pivot_request(text: str, sheet: str, columns: list[str]) -> dict[str,
         if by_two:
             row_column = _resolve_column_phrase(by_two.group(1), columns) or ""
             column_column = _resolve_column_phrase(by_two.group(2), columns) or ""
-    if not row_column:
-        by_one = re.search(r"\bby\s+([a-z ]+?)(?:,|$)", text)
-        if by_one:
-            row_column = _resolve_column_phrase(by_one.group(1), columns) or ""
 
-    if not row_column:
-        row_column = _find_column_by_names(columns, ("advisor", "major", "discipline", "year", "standing", "location")) or ""
-    if not row_column:
-        return None
+    if strict:
+        # Trust only an unambiguous two-dimension match: both sides must
+        # resolve to real, distinct columns that are plausible group-by
+        # dimensions (not a numeric metric or a per-row identifier -- e.g.
+        # "sort by GPA and name" should never become a pivot of GPA x Name).
+        if (
+            not row_column
+            or not column_column
+            or row_column == column_column
+            or not _is_valid_pivot_dimension(row_column, columns)
+            or not _is_valid_pivot_dimension(column_column, columns)
+        ):
+            return None
+    else:
+        if not row_column:
+            by_one = re.search(r"\bby\s+([a-z ]+?)(?:,|$)", text)
+            if by_one:
+                row_column = _resolve_column_phrase(by_one.group(1), columns) or ""
+
+        if not row_column:
+            row_column = _find_column_by_names(columns, ("advisor", "major", "discipline", "year", "standing", "location")) or ""
+        if not row_column:
+            return None
 
     metric_label = f"{metric} {value_column}".strip() if value_column else "count"
     cross = f" with columns from {column_column}" if column_column else ""
@@ -577,6 +611,36 @@ def _parse_pivot_request(text: str, sheet: str, columns: list[str]) -> dict[str,
             f"and {metric_label} as the value."
         ),
     }
+
+
+_NON_DIMENSION_CANONICALS = {
+    "student_id", "first_name", "last_name", "full_name", "email", "phone",
+    "date_of_birth", "notes", "home_address", "mailing_address", "emergency_contact",
+    "gpa", "cumulative_gpa", "term_gpa",
+    "attendance_rate", "days_present", "days_absent", "days_tardy",
+    "unexcused_absences", "excused_absences", "recent_absences",
+    "credits_completed", "credits_attempted",
+    "psat_math", "psat_reading_writing", "psat_total",
+    "sat_math", "sat_ebrw", "sat_total",
+    "math_score", "reading_writing_score", "total_score",
+}
+
+
+def _is_valid_pivot_dimension(column: str, columns: list[str]) -> bool:
+    """Reject per-row identifiers and continuous metrics as pivot rows/columns
+    -- those belong in value_column, not as a grouping dimension. Used only by
+    the implicit (no "pivot" keyword) trigger, so a guess here never produces
+    a nonsensical cross-tab like GPA x Name."""
+    canonical = canonical_for(column)
+    if canonical and canonical in _NON_DIMENSION_CANONICALS:
+        return False
+    normalized = normalize_text(column)
+    metric_tokens = ("gpa", "attendance", "absent", "present", "sat", "psat",
+                      "score", "rate", "days", "credit", "balance", "id",
+                      "email", "phone", "address", "name", "birth", "dob")
+    if any(token in normalized for token in metric_tokens):
+        return False
+    return True
 
 
 def _metric_column_from_text(text: str, columns: list[str]) -> str:
@@ -1173,7 +1237,7 @@ def _repair_llm_query(
     if not user_message or not columns:
         return query
     text = normalize_text(user_message)
-    synonyms = load_json("synonyms.json")
+    synonyms = load_synonyms_with_learned()
     performance = _detect_performance_query(text, columns, synonyms)
     if performance:
         group_column, gpa_column, direction = performance

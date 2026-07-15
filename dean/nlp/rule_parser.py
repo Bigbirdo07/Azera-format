@@ -8,6 +8,7 @@ from nlp.synonym_mapper import (
     concept_from_text,
     load_json,
     load_json_list,
+    load_synonyms_with_learned,
     match_column_by_terms,
     match_column_for_concept,
     normalize_text,
@@ -45,7 +46,7 @@ def parse_request(
     actions = load_json("actions.json")
     charts = load_json("charts.json")
     report_templates = load_json("report_templates.json")
-    synonyms = load_json("synonyms.json")
+    synonyms = load_synonyms_with_learned()
     synonyms = _with_learned_synonyms(synonyms)
     university_terms = load_json("university_terms.json")
     templates = load_json("response_templates.json")
