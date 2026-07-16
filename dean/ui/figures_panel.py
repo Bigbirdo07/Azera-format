@@ -44,6 +44,13 @@ _CHART_TYPE_HINTS: tuple[tuple[str, str], ...] = (
 # as a figure request even without the word "chart".
 _AGG_BY_PATTERN = re.compile(r"\b(?:average|avg|mean|median)\b[a-z0-9 ]*\b(?:by|per)\b")
 
+# "by X and Y" (two dimensions) can't be a single-axis bar chart -- it's a
+# cross-tab, which belongs to the deterministic pivot planner instead
+# (nlp.planner_router._parse_pivot_request). Without this, "average GPA by
+# advisor and standing" would match _AGG_BY_PATTERN above and get rendered as
+# a misleading one-dimension chart before the pivot planner ever sees it.
+_TWO_DIMENSION_BREAKDOWN = re.compile(r"\bby\s+[a-z][a-z ]*?\s+(?:and|,)\s+[a-z][a-z ]*")
+
 # Columns that must never be a chart's group/x-axis: grouping a count by a
 # near-unique identity or contact field produces a useless (one-bar-per-row)
 # chart, which is worse than asking the user to clarify.
@@ -79,6 +86,8 @@ def is_chart_request(text: str) -> bool:
         return False
     if any(keyword in lower for keyword in _CHART_KEYWORDS):
         return True
+    if _TWO_DIMENSION_BREAKDOWN.search(lower):
+        return False
     return bool(_AGG_BY_PATTERN.search(lower))
 
 

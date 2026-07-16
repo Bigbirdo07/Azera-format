@@ -74,6 +74,19 @@ def test_average_by_phrasing_is_a_figure_without_the_word_chart():
     assert not is_chart_request("what is the average GPA")
 
 
+def test_two_dimension_breakdown_defers_to_pivot_not_chart():
+    # A single-axis bar chart can't represent two group-by dimensions, and the
+    # deterministic pivot planner (nlp.planner_router) handles this shape --
+    # so is_chart_request must yield to it, the same way it already yields on
+    # the literal word "pivot". Caught live: without this, "average GPA by
+    # advisor and standing" silently rendered a misleading one-dimension bar
+    # chart instead of ever reaching the pivot table.
+    assert not is_chart_request("average GPA by advisor and standing")
+    assert not is_chart_request("break down attendance rate by advisor and standing")
+    # A genuinely single-dimension "by Y" breakdown is still a chart.
+    assert is_chart_request("average GPA by advisor")
+
+
 def test_chart_never_groups_by_identity_column(columns, students):
     # Even a vague request must not group by Student ID / names.
     for question in ("chart of students", "show a chart of the students by name"):

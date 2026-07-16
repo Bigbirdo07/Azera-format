@@ -446,3 +446,74 @@ def test_between_filter_inclusive(mini):
     )
     # mini GPAs: 3.1, 2.2, 1.9, 3.8, 2.5 → in [2.0, 3.0]: 2.2 + 2.5 = 2
     assert result.value == 2
+
+
+# --- status/standing caveat -------------------------------------------------
+# When a numeric metric is grouped or pivoted by an imported status/standing
+# label with no accompanying "Reason" column, the description should say so --
+# otherwise a case like "GPA 3.06 but Bad Standing" reads as a data error
+# rather than the normal real-world mismatch it is (Standing isn't computed
+# from GPA; see core.query_engine._status_column_caveat).
+
+def test_groupby_average_by_status_column_includes_caveat(sheets):
+    result = run_query(
+        {"operation": "groupby_average", "sheet": "Students", "group_by": "Academic Status", "value_column": "GPA"},
+        sheets,
+    )
+    assert "existing label" in result.description
+    assert "Academic Status" in result.description
+
+
+def test_groupby_average_by_non_status_column_has_no_caveat(sheets):
+    result = run_query(
+        {"operation": "groupby_average", "sheet": "Students", "group_by": "Department", "value_column": "GPA"},
+        sheets,
+    )
+    assert "existing label" not in result.description
+
+
+def test_groupby_count_has_no_caveat_even_by_status_column(sheets):
+    result = run_query(
+        {"operation": "groupby_count", "sheet": "Students", "group_by": "Academic Status"},
+        sheets,
+    )
+    assert "existing label" not in result.description
+
+
+def test_pivot_average_crossed_with_status_column_includes_caveat(sheets):
+    result = run_query(
+        {
+            "operation": "pivot_table_summary",
+            "sheet": "Students",
+            "pivot_rows": "Department",
+            "pivot_columns": "Academic Status",
+            "value_column": "GPA",
+            "metric": "average",
+        },
+        sheets,
+    )
+    assert "existing label" in result.description
+
+
+def test_status_caveat_suppressed_when_reason_column_present(sheets):
+    frame = sheets["Students"].copy()
+    frame["Academic Status Reason"] = ""
+    result = run_query(
+        {"operation": "groupby_average", "sheet": "Students", "group_by": "Academic Status", "value_column": "GPA"},
+        {"Students": frame},
+    )
+    assert "existing label" not in result.description
+
+
+def test_unrelated_reason_column_does_not_suppress_the_caveat(sheets):
+    # Caught live: a workbook enriched with Dean's own combined-risk "Risk
+    # Reason" column was silently suppressing the Standing caveat, even
+    # though Risk Reason explains Dean's computed risk score, not why an
+    # imported Academic Status label disagrees with GPA.
+    frame = sheets["Students"].copy()
+    frame["Risk Reason"] = ""
+    result = run_query(
+        {"operation": "groupby_average", "sheet": "Students", "group_by": "Academic Status", "value_column": "GPA"},
+        {"Students": frame},
+    )
+    assert "existing label" in result.description

@@ -15,9 +15,51 @@ from typing import Any
 
 import pandas as pd
 
+from core.schema import canonical_for
+
 
 # Values that count as a "missing / incomplete" status for membership filters.
 _BLANK_TOKENS = {"", "nan", "none", "null", "n/a", "na"}
+
+# Canonical concepts for imported status/standing labels (not computed by
+# Dean) that commonly get crossed against a numeric metric in a groupby or
+# pivot. These correlate loosely with metrics like GPA in real data but are
+# never a strict cutoff -- a school's own SIS sets them from a mix of
+# factors (credits, discipline, a prior term's probation, etc.), so a
+# high-GPA student can still carry a "Bad Standing" label. Without this note
+# that reads as a data error rather than the normal case it is.
+_IMPORTED_STATUS_CANONICALS = {"academic_status", "conduct_status", "enrollment_status"}
+_IMPORTED_STATUS_NAME_HINTS = ("standing", "status")
+
+
+def _status_column_caveat(frame: pd.DataFrame, column: str) -> str:
+    """Caveat to append to a result description when `column` is an imported
+    status/standing label being crossed against a numeric metric, and the
+    workbook has no accompanying "<...> Reason" column to explain outliers."""
+    if not column:
+        return ""
+    canonical = canonical_for(column)
+    normalized = column.strip().lower()
+    is_status_like = canonical in _IMPORTED_STATUS_CANONICALS or any(
+        hint in normalized for hint in _IMPORTED_STATUS_NAME_HINTS
+    )
+    if not is_status_like:
+        return ""
+    # Only a reason column tied to *this* status field counts -- a workbook
+    # can have "Risk Reason" (Dean's own combined-risk explanation) without
+    # that saying anything about why an imported "Standing" label disagrees
+    # with GPA. Requiring the column name as a prefix keeps this specific.
+    has_reason_column = any(
+        str(c).strip().lower().startswith(normalized) and "reason" in str(c).strip().lower()
+        for c in frame.columns
+    )
+    if has_reason_column:
+        return ""
+    return (
+        f" Note: {column} is an existing label from your workbook, not derived from this "
+        f"metric -- individual students may not follow the overall pattern (no {column} "
+        "Reason field is present to explain exceptions)."
+    )
 
 ASK_OPERATIONS = {
     "count_rows",
@@ -311,11 +353,12 @@ def _group_by(
         if top
         else "No rows matched."
     )
+    caveat = _status_column_caveat(frame, group_by) if operation != "groupby_count" else ""
     return QueryResult(
         operation=operation,
         row_count=int(mask.sum()),
         table=table,
-        description=f"Grouped {metric_column} by {group_by}. {top_desc}",
+        description=f"Grouped {metric_column} by {group_by}. {top_desc}{caveat}",
         columns_used=[group_by] + ([value_column] if value_column else []),
     )
 
@@ -904,12 +947,15 @@ def _pivot_table_summary(
     table_df.columns = [str(column) for column in table_df.columns]
     metric_label = f"{metric} {value_column}".strip() if value_column else "count"
     by_label = f"{row_column} by {column_column}" if column_column else row_column
+    caveat = ""
+    if value_column:
+        caveat = _status_column_caveat(frame, row_column) or _status_column_caveat(frame, column_column)
     return QueryResult(
         operation="pivot_table_summary",
         value=len(table_df.index),
         row_count=int(len(subset)),
         table=table_df.to_dict(orient="records"),
-        description=f"Created a pivot-style summary of {metric_label} across {by_label}.",
+        description=f"Created a pivot-style summary of {metric_label} across {by_label}.{caveat}",
         columns_used=list(dict.fromkeys(
             [c for c in [row_column, column_column, value_column] if c]
             + [f["column"] for f in filters if f.get("column")]

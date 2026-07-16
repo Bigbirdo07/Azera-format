@@ -495,7 +495,14 @@ def _detect_group_by(
 def _resolve_phrase_to_column(
     phrase: str, columns: list[str], synonyms: dict[str, Any], take: int = 3, from_end: bool = False
 ) -> str | None:
-    tokens = phrase.strip().split()
+    # normalize_text turns a possessive like "advisor's" into "advisor s"
+    # (apostrophe -> space), leaving a stray one-letter "s" token that is
+    # never a meaningful word on its own. Left in, it silently displaces the
+    # real noun under `take` truncation -- e.g. "advisor's students" ->
+    # ["advisor", "s", "students"] -> from_end=True, take=2 keeps only
+    # ["s", "students"], dropping "advisor" and misrouting the group-by to a
+    # "students" match instead. Drop it before tokenizing/truncating.
+    tokens = [t for t in phrase.strip().split() if t != "s"]
     if from_end:
         tokens = tokens[-take:]
     candidates = []

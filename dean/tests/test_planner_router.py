@@ -887,6 +887,15 @@ def test_class_best_gpa_uses_year_when_no_course_column(sheets, columns):
     assert plan["limit"] == 1
 
 
+def test_possessive_advisors_students_groups_by_advisor_not_student_id(sheets, columns):
+    # Caught live: normalize_text turns "advisor's" into "advisor s"
+    # (apostrophe -> space), leaving a stray "s" token that displaced
+    # "advisor" under from_end truncation and silently grouped by Student ID
+    # instead -- "S10046 has the lowest GPA" instead of an advisor name.
+    plan = _performance_plan("which advisor's students have the lowest average gpa", sheets, columns)
+    assert plan["group_by"] == "Advisor"
+
+
 def test_worst_gpa_with_category_groups_by_category_not_gpa(sheets, columns):
     """Regression: 'which major has the worst gpa' must group by Major, not GPA.
     The GPA column is the ranking value, never a grouping candidate."""
