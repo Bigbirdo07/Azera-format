@@ -517,3 +517,17 @@ def test_unrelated_reason_column_does_not_suppress_the_caveat(sheets):
         {"Students": frame},
     )
     assert "existing label" in result.description
+
+
+# --- data quality summary dtype -------------------------------------------
+# Caught live: a "" string mixed into the otherwise-numeric "Missing %"
+# column broke Streamlit's Arrow serialization of the result table
+# (pyarrow.lib.ArrowInvalid). The fully-duplicated-rows row must use a
+# numeric placeholder, not a string, to keep the column a single dtype.
+
+def test_data_quality_summary_missing_percent_column_is_numeric(sheets):
+    result = run_query({"operation": "data_quality_summary", "sheet": "Students"}, sheets)
+    values = [row["Missing %"] for row in result.table]
+    assert all(v is None or isinstance(v, (int, float)) for v in values)
+    table_df = pd.DataFrame(result.table)
+    assert table_df["Missing %"].dtype.kind == "f"

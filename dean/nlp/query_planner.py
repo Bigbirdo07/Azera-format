@@ -12,7 +12,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-from core.schema import _FREE_TEXT_NAME_PATTERNS
+from core.schema import _FREE_TEXT_NAME_PATTERNS, canonical_for
 from nlp.local_model import plan_query_from_local_model
 from nlp.synonym_mapper import (
     load_json,
@@ -141,6 +141,8 @@ def _rule_plan(user_request: str, sheet: str, columns: list[str], frame=None) ->
         )
 
     comparison_query = _detect_cohort_comparison(text, sheet, columns, frame, synonyms)
+    if not comparison_query:
+        comparison_query = _detect_value_cohort_comparison(text, sheet, columns, frame)
     if comparison_query:
         return QueryPlanResult(
             query=comparison_query,
@@ -973,6 +975,19 @@ def _detect_filters(text: str, columns: list[str], synonyms: dict[str, Any],
         ):
             filters.append({"column": column, "operator": "is_missing"})
 
+    # Fallback: the literal-name match above requires the exact header text
+    # ("SAT Total"); a generic phrase like "missing SAT scores" needs
+    # concept/synonym resolution instead of an exact substring match.
+    if not any(f["operator"] == "is_missing" for f in filters):
+        blank_match = re.search(
+            r"\b(?:missing|without|blank|empty)\s+(?:a\s+|an\s+|the\s+)?([a-z]+(?:\s+[a-z]+)?)\b",
+            text,
+        )
+        if blank_match:
+            column = _resolve_phrase_to_column(blank_match.group(1), columns, synonyms, take=2, from_end=True)
+            if column and column not in already:
+                filters.append({"column": column, "operator": "is_missing"})
+
     already = {f["column"] for f in filters}
     for column in columns:
         if column in already:
@@ -1018,6 +1033,63 @@ def _detect_cohort_comparison(
         "plain_english_question": text,
         "confidence": HIGH,
     }
+
+
+_COMPARISON_SEPARATOR = re.compile(
+    r"\b(?:compare\s+)?(.+?)\s+(?:vs\.?|versus|against)\s+(.+?)(?:\s+students?)?\s*$"
+)
+
+# Columns where a coincidental value match is either meaningless (an
+# identifier) or shouldn't be split into a two-row comparison table.
+_COMPARISON_EXCLUDED_CONCEPTS = {"student_id", "full_name", "first_name", "last_name", "email", "phone"}
+
+
+def _detect_value_cohort_comparison(
+    text: str, sheet: str, columns: list[str], frame,
+) -> dict[str, Any] | None:
+    """Generalizes _detect_cohort_comparison beyond advisor caseloads: "compare
+    Good Standing vs Bad Standing students" should compare two VALUES of
+    whichever column holds them (Standing here), not just two advisors."""
+    if frame is None:
+        return None
+    match = _COMPARISON_SEPARATOR.search(text)
+    if not match:
+        return None
+    phrase_a = match.group(1).strip()
+    phrase_b = match.group(2).strip()
+    if not phrase_a or not phrase_b or phrase_a == phrase_b:
+        return None
+
+    for column in columns:
+        if column not in frame.columns:
+            continue
+        if canonical_for(column) in _COMPARISON_EXCLUDED_CONCEPTS:
+            continue
+        series = frame[column]
+        if series.dtype.kind in "iuf":
+            continue
+        value_by_normalized = {
+            normalize_text(value): value for value in series.dropna().astype(str).unique()
+        }
+        value_a = value_by_normalized.get(phrase_a) or value_by_normalized.get(_singularize(phrase_a))
+        value_b = value_by_normalized.get(phrase_b) or value_by_normalized.get(_singularize(phrase_b))
+        if value_a and value_b and value_a != value_b:
+            return {
+                "request_type": "ask_question",
+                "operation": "cohort_comparison",
+                "sheet": sheet,
+                "filters": [{"column": column, "operator": "in", "value": [value_a, value_b]}],
+                "group_by": column,
+                "value_column": "",
+                "sort": None,
+                "sort_by": "",
+                "limit": None,
+                "select_columns": [],
+                "filter_mode": "all",
+                "plain_english_question": text,
+                "confidence": HIGH,
+            }
+    return None
 
 
 def _matching_person_values(text: str, series) -> list[str]:

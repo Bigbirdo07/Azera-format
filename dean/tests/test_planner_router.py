@@ -486,6 +486,32 @@ def test_compare_two_named_advisors_excludes_shared_first_name():
     ]
 
 
+def test_compare_two_category_values_routes_to_cohort_comparison():
+    # Caught live: "compare Good Standing vs Bad Standing students" was
+    # falling through to a plain count_rows filtered to just "Bad Standing"
+    # -- half the comparison silently dropped. _detect_cohort_comparison only
+    # ever matched two ADVISOR names; this generalizes it to any column whose
+    # values match both phrases.
+    sheets, columns = _mock_comparison_sheets()
+    r = _route("Compare Good Standing vs Bad Standing students", sheets, {"Students": columns})
+    assert r["plan"]["operation"] == "cohort_comparison"
+    assert r["plan"]["group_by"] == "Standing"
+    assert r["plan"]["filters"] == [
+        {"column": "Standing", "operator": "in", "value": ["Good Standing", "Bad Standing"]}
+    ]
+
+
+def test_missing_sat_scores_resolves_via_concept_not_literal_header():
+    # Caught live: "missing SAT scores" declined ("local model disabled")
+    # because the blank-value filter detector only matched the literal
+    # column header text ("SAT Total"), not the generic phrase a user
+    # actually types. Falls back to concept/synonym resolution.
+    sheets, columns = _mock_dean_sheets()
+    r = _route("Which students are missing SAT scores?", sheets, {"Students": columns})
+    assert r["intent"] == "query"
+    assert r["plan"]["filters"] == [{"column": "SAT Total", "operator": "is_missing"}]
+
+
 def test_ambiguous_shared_value_asks_for_clarification_options():
     sheets, columns = _mock_comparison_sheets()
     r = _route("show Nursing students", sheets, {"Students": columns})

@@ -471,7 +471,10 @@ def _data_quality_summary(frame: pd.DataFrame) -> QueryResult:
     missing = _missing_summary(frame)
     full_dupes = int(frame.duplicated(keep=False).sum())
     rows = list(missing.table)
-    rows.append({"Column": "(fully duplicated rows)", "Missing": full_dupes, "Missing %": ""})
+    # None (not "") so pandas keeps "Missing %" a single numeric dtype --
+    # mixing a string into an otherwise-float column breaks Streamlit's
+    # Arrow serialization of the result table.
+    rows.append({"Column": "(fully duplicated rows)", "Missing": full_dupes, "Missing %": None})
     desc = (
         f"{total} rows scanned. {len(missing.table)} column(s) have missing values; "
         f"{full_dupes} fully duplicated row(s)."
