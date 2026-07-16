@@ -387,18 +387,6 @@ def _confidence_level(confidence: float) -> str:
     return "low"
 
 
-# Logging helper --------------------------------------------------------------
-
-
-def describe_source(plan: PlanResult) -> str:
-    """Return a privacy-safe label for the source of the plan.
-
-    Used by the audit logger so we record whether the rule parser or the local
-    LLM produced the plan, without ever logging raw rows or values.
-    """
-    return f"source={plan.source};plan_type={plan.plan_type};confidence={plan.confidence:.2f}"
-
-
 # Learning loop ---------------------------------------------------------------
 
 

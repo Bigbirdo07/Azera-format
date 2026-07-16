@@ -42,17 +42,6 @@ class ActionResult:
     columns: list[str] = field(default_factory=list)
     error: str | None = None
 
-    def as_dict(self) -> dict[str, Any]:
-        return {
-            "success": self.success,
-            "action_type": self.action_type,
-            "rows_affected": self.rows_affected,
-            "output_file": self.output_file,
-            "message": self.message,
-            "columns": self.columns,
-            "error": self.error,
-        }
-
 
 # --- helpers -----------------------------------------------------------------
 

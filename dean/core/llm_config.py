@@ -27,13 +27,6 @@ DEFAULT_LLM_CONFIG: dict[str, Any] = {
 }
 
 
-def load_llm_config(overrides: dict[str, Any] | None = None) -> dict[str, Any]:
-    config = dict(DEFAULT_LLM_CONFIG)
-    if overrides:
-        config.update({k: v for k, v in overrides.items() if k in config})
-    return config
-
-
 def from_app_settings(settings: dict[str, Any] | None) -> dict[str, Any]:
     """Map the existing app settings dict onto the Phase G config.
 

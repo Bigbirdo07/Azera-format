@@ -63,26 +63,6 @@ class RiskSettings:
     def mention_attendance_risk(self) -> str:
         return f"Attendance Rate below {_fmt_num(self.attendance_risk_threshold)}%"
 
-    def mention_severe_attendance_risk(self) -> str:
-        return f"Attendance Rate below {_fmt_num(self.severe_attendance_risk_threshold)}%"
-
-    def mention_unexcused_concern(self) -> str:
-        return f"{int(self.unexcused_absence_concern)} or more unexcused absences"
-
-    def mention_tardy_concern(self) -> str:
-        return f"{int(self.tardy_concern)} or more tardies"
-
-    def has_assessment_thresholds(self) -> bool:
-        return any(
-            value is not None
-            for value in (
-                self.sat_math_benchmark_threshold,
-                self.sat_ebrw_benchmark_threshold,
-                self.psat_math_benchmark_threshold,
-                self.psat_reading_writing_benchmark_threshold,
-            )
-        )
-
 
 def _fmt_num(value: float | int) -> str:
     """Drop the trailing .0 from whole numbers so "2.0" → "2.0" stays the

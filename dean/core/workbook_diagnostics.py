@@ -33,10 +33,6 @@ class WorkbookDiagnostics:
     hidden_sheets: list[str]
     sheets: list[SheetDiagnostics]
 
-    @property
-    def has_complex_formatting(self) -> bool:
-        return any(sheet.complex_formatting_warnings for sheet in self.sheets)
-
 
 def diagnose_workbook(workbook: Workbook) -> WorkbookDiagnostics:
     sheet_diagnostics = [_diagnose_sheet(worksheet) for worksheet in workbook.worksheets]
@@ -45,20 +41,6 @@ def diagnose_workbook(workbook: Workbook) -> WorkbookDiagnostics:
         hidden_sheets=[sheet.name for sheet in sheet_diagnostics if sheet.is_hidden],
         sheets=sheet_diagnostics,
     )
-
-
-def diagnostics_for_sheet(
-    diagnostics: WorkbookDiagnostics,
-    sheet_name: str | None,
-) -> SheetDiagnostics | None:
-    for sheet in diagnostics.sheets:
-        if sheet.name == sheet_name:
-            return sheet
-    return None
-
-
-def sheet_requires_edit_warning(sheet: SheetDiagnostics | None) -> bool:
-    return bool(sheet and sheet.complex_formatting_warnings)
 
 
 def _diagnose_sheet(worksheet: Worksheet) -> SheetDiagnostics:

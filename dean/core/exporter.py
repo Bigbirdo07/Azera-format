@@ -12,18 +12,6 @@ OUTPUTS_DIR = data_dir("outputs")
 BACKUPS_DIR = data_dir("backups")
 
 
-def export_workbook_copy(workbook: Workbook, original_file_name: str) -> Path:
-    """Save a timestamped copy of the workbook without overwriting the original."""
-    OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
-
-    original_path = Path(original_file_name)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    export_path = _unique_output_path(f"{original_path.stem}_copy_{timestamp}.xlsx")
-
-    workbook.save(export_path)
-    return export_path
-
-
 def export_edited_workbook(workbook: Workbook, original_file_name: str) -> Path:
     """Save an edited workbook copy into outputs/ without overwriting the original."""
     OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)

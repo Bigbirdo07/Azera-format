@@ -217,10 +217,6 @@ def attach_assessment_metrics(roster_df: pd.DataFrame, assessment_metrics: pd.Da
     ).drop(columns=["Student ID_assessment"], errors="ignore")
 
 
-def assessment_available_columns(columns) -> list[str]:
-    return _assessment_columns(columns)
-
-
 def _assessment_columns(columns) -> list[str]:
     out = []
     for column in columns:

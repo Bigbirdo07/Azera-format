@@ -15,7 +15,6 @@ Defaults: Generic Academic + Administrator/Dean.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from enum import Enum
 
 
@@ -64,14 +63,6 @@ ROLE_LABELS = {
     Role.TEACHER: "Teacher / Professor",
     Role.REGISTRAR: "Registrar / Data Staff",
 }
-
-
-@dataclass(frozen=True)
-class InstitutionContext:
-    """The active mode + role for the session. Used by every helper that
-    needs to translate labels."""
-    mode: InstitutionMode = InstitutionMode.GENERIC
-    role: Role = Role.ADMIN
 
 
 # ---- label mapping --------------------------------------------------------

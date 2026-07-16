@@ -57,11 +57,9 @@ from nlp.uncertainty import (
     build_assumption_note,
     classify_confidence,
     detect_vague_alternatives,
-    should_assume,
 )
 from nlp.vague_terms import (
     VagueResolution,
-    message_has_vague_risk_term,
     resolve_vague_term,
 )
 

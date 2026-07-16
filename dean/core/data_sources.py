@@ -111,9 +111,6 @@ class DataSourceRegistry:
     def set_attendance(self, attendance: AttendanceSource | None) -> None:
         self.attendance = attendance
 
-    def set_assessments(self, assessments: AssessmentSource | None) -> None:
-        self.assessments = assessments
-
     def clear(self) -> None:
         self.roster = None
         self.attendance = None
@@ -274,10 +271,6 @@ class DataSourceRegistry:
         if self.attendance is not None and not self.attendance.frame.empty:
             return True
         wa = self.workbook_attendance
-        return wa is not None and wa.mode in {"inline", "sheet"}
-
-    def assessment_available(self) -> bool:
-        wa = self.workbook_assessment
         return wa is not None and wa.mode in {"inline", "sheet"}
 
 

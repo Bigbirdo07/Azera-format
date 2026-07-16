@@ -64,18 +64,6 @@ def affected_row_count(command: dict[str, Any], sheets: dict[str, pd.DataFrame])
     return len(dataframe.index)
 
 
-def change_summary(command: dict[str, Any], sheets: dict[str, pd.DataFrame]) -> str:
-    action = command.get("action", "unknown")
-    columns = affected_columns(command)
-    rows = affected_row_count(command, sheets)
-    return (
-        f"Action: {action}\n"
-        f"Sheet: {command.get('sheet', '')}\n"
-        f"Columns affected: {', '.join(columns) if columns else 'none detected'}\n"
-        f"Estimated rows affected: {rows}"
-    )
-
-
 def _condition_mask(dataframe: pd.DataFrame, conditions: list[dict[str, Any]]) -> int:
     mask = pd.Series(True, index=dataframe.index)
     for condition in conditions:

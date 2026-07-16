@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Any
-
 
 SUPPORTED_ACTIONS = {
     "create_chart",
@@ -110,19 +108,3 @@ SUPPORTED_FORMULAS = {
 }
 
 
-def default_command(sheet_name: str | None = None, column_name: str | None = None) -> dict[str, Any]:
-    command: dict[str, Any] = {
-        "action": "highlight_rows",
-        "sheet": sheet_name or "",
-        "conditions": [
-            {
-                "column": column_name or "",
-                "operator": "greater_than",
-                "value": 0,
-            }
-        ],
-        "format": {
-            "fill_color": "yellow",
-        },
-    }
-    return command

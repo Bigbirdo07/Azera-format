@@ -12,7 +12,6 @@ from nlp.llm_json_parser import (
     LLMCommandError,
     ParsedPlan,
     parse_llm_plan,
-    parse_llm_response,
 )
 from nlp.model_prompt import (
     OLLAMA_URL,
@@ -20,17 +19,10 @@ from nlp.model_prompt import (
     build_expert_planner_prompt,
     build_explain_prompt,
     build_intent_prompt,
-    build_prompt,
     build_query_planner_prompt,
 )
 from nlp.privacy_filter import check_local_model_request_privacy
 from core.privacy_guard import PrivacyGuardError, assert_loopback_url
-
-
-@dataclass(frozen=True)
-class LocalModelResult:
-    command: dict[str, Any] | None
-    error: str | None = None
 
 
 @dataclass(frozen=True)
@@ -97,44 +89,6 @@ def get_ollama_status(model_name: str, timeout: int = 2) -> OllamaStatus:
 def test_ollama_connection(model_name: str) -> tuple[bool, str]:
     status = get_ollama_status(model_name, timeout=3)
     return status.available, status.user_message
-
-
-def command_from_local_model(
-    *,
-    user_request: str,
-    model_name: str,
-    sheet_names: list[str],
-    sheet_columns: dict[str, list[str]],
-) -> LocalModelResult:
-    """Legacy single-command path. Kept for backwards compatibility."""
-    privacy_check = check_local_model_request_privacy(user_request)
-    if not privacy_check.allowed:
-        reasons = ", ".join(privacy_check.reasons)
-        return LocalModelResult(
-            command=None,
-            error=f"Local model fallback was skipped because the request may contain sensitive data: {reasons}.",
-        )
-
-    try:
-        assert_loopback_url(OLLAMA_URL)
-    except PrivacyGuardError as exc:
-        return LocalModelResult(command=None, error=str(exc))
-
-    prompt = build_prompt(
-        user_request=user_request,
-        sheet_names=sheet_names,
-        sheet_columns=sheet_columns,
-    )
-    raw_response, error = _call_ollama(prompt, model_name)
-    if error or raw_response is None:
-        return LocalModelResult(command=None, error=error)
-
-    try:
-        command = parse_llm_response(raw_response, sheet_columns)
-    except LLMCommandError as exc:
-        return LocalModelResult(command=None, error=str(exc))
-
-    return LocalModelResult(command=command)
 
 
 def plan_from_local_model(

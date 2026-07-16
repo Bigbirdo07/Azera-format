@@ -75,9 +75,5 @@ def export_privacy_report() -> Path:
     return report_path
 
 
-def logging_enabled() -> bool:
-    return load_privacy_settings()["logging_mode"] != "disabled"
-
-
 def _count(table_name: str) -> int:
     return int(fetch_all(f"SELECT COUNT(*) AS count FROM {table_name}")[0]["count"])

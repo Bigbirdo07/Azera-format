@@ -11,7 +11,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from datetime import datetime
-from pathlib import Path
 from typing import Any
 
 import altair as alt
@@ -548,22 +547,3 @@ def render_figures_panel() -> None:
     st.caption(
         f"{figure.get('title', 'Figure')} · {figure.get('row_count', 0)} row(s) · {figure.get('created_at', '')}"
     )
-
-
-# Export helpers --------------------------------------------------------------
-
-
-FIGURES_DIR = Path("outputs") / "figures"
-
-
-def export_latest_figure_csv() -> tuple[str, bytes] | None:
-    figure = st.session_state.get("latest_figure")
-    if not figure:
-        return None
-    summary = pd.DataFrame(figure.get("summary_records") or [])
-    if summary.empty:
-        return None
-    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    field_part = (figure.get("field") or "figure").replace(" ", "_")
-    file_name = f"chart_{field_part}_{stamp}.csv"
-    return file_name, summary.to_csv(index=False).encode("utf-8")
