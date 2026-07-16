@@ -125,8 +125,19 @@ def _looks_like_followup(text: str) -> bool:
 # follow-up. ("sort"/"group" alone are treated as view refinements, not edits.)
 _HARD_EDIT_CUES = (
     "highlight",
-    "color",
-    "colour",
+    # Bare "color"/"colour" is too broad -- it also matches an unrelated
+    # question like "what is their favorite color", which isn't a formatting
+    # request. Require an actual formatting verb/phrase alongside the word
+    # (caught live: "show me students by their favorite color" was
+    # hijacked into a highlight-edit confirmation on an unrelated column).
+    "color the",
+    "colour the",
+    "color these",
+    "colour these",
+    "color coded",
+    "colour coded",
+    "in color",
+    "in colour",
     "move ",
     "put ",
     "send ",
