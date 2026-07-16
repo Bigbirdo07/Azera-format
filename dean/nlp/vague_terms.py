@@ -123,12 +123,6 @@ def resolve_vague_term(
     return None
 
 
-# Phase L.14: a guard the router can call independently of the resolver.
-def message_has_vague_risk_term(message: str) -> bool:
-    text = f" {normalize_text(message)} "
-    return _find_phrase(text, VAGUE_RISK_PHRASES) is not None
-
-
 # Internal helpers -----------------------------------------------------------
 
 

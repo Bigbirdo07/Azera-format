@@ -6,7 +6,7 @@ import pytest
 
 from core.interaction_logger import extract_corrected_request, is_correction_message
 from nlp.planner_router import plan_user_request
-from nlp.vague_terms import message_has_vague_risk_term, resolve_vague_term
+from nlp.vague_terms import resolve_vague_term
 
 
 COLUMNS_FULL = ["Department", "Major", "Year", "GPA", "Academic Status", "Advisor"]
@@ -84,12 +84,6 @@ def test_specific_query_returns_none():
                              columns=COLUMNS_FULL,
                              categorical_values={})
     assert res is None
-
-
-def test_message_has_vague_risk_term():
-    assert message_has_vague_risk_term("show me struggling students")
-    assert message_has_vague_risk_term("which students are at risk this term")
-    assert not message_has_vague_risk_term("show me Accounting students")
 
 
 # ---- end-to-end through the planner ----------------------------------------

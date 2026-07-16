@@ -11,7 +11,6 @@ from nlp.uncertainty import (
     build_assumption_note,
     classify_confidence,
     detect_vague_alternatives,
-    should_assume,
 )
 
 
@@ -35,23 +34,6 @@ def test_classify_confidence_buckets():
     assert classify_confidence(0.7) == "medium"
     assert classify_confidence(MEDIUM_CONFIDENCE) == "medium"
     assert classify_confidence(0.4) == "low"
-
-
-def test_should_assume_only_for_safe_read_only():
-    assert should_assume(confidence=0.7, intent="query", requires_confirmation=False,
-                         pending_type=None, has_sensitive=False) is True
-    # Edits/exports never assume.
-    assert should_assume(confidence=0.7, intent="export", requires_confirmation=True,
-                         pending_type="export", has_sensitive=False) is False
-    # Sensitive-field requests never assume.
-    assert should_assume(confidence=0.7, intent="query", requires_confirmation=False,
-                         pending_type=None, has_sensitive=True) is False
-    # High confidence does not need an assumption note.
-    assert should_assume(confidence=0.95, intent="query", requires_confirmation=False,
-                         pending_type=None, has_sensitive=False) is False
-    # Low confidence falls through to clarify, not assume.
-    assert should_assume(confidence=0.4, intent="query", requires_confirmation=False,
-                         pending_type=None, has_sensitive=False) is False
 
 
 # ---- vague-term detection ---------------------------------------------------

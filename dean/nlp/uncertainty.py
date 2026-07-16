@@ -118,30 +118,6 @@ def detect_vague_alternatives(message: str) -> list[str]:
     return matched
 
 
-def should_assume(
-    *,
-    confidence: float,
-    intent: str,
-    requires_confirmation: bool,
-    pending_type: str | None,
-    has_sensitive: bool,
-) -> bool:
-    """Decide whether to execute now and surface an assumption note.
-
-    We assume only for medium-confidence, read-only query intents that do not
-    touch sensitive fields and do not need a confirmation gate.
-    """
-    if intent != "query":
-        return False
-    if requires_confirmation:
-        return False
-    if pending_type in {"export", "note_edit", "field_update"}:
-        return False
-    if has_sensitive:
-        return False
-    return MEDIUM_CONFIDENCE <= confidence < HIGH_CONFIDENCE
-
-
 def build_assumption_note(narration: str) -> str:
     """Wrap the deterministic narration in an explicit 'I interpreted this as' lead."""
     if not narration:
