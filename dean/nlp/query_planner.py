@@ -328,10 +328,21 @@ def _rule_plan(user_request: str, sheet: str, columns: list[str], frame=None) ->
         value_column = ""
         group_by = None
 
-    # "what is each student's housing status" — a lookup for a field the
-    # workbook doesn't have. Say so instead of answering a generic count.
-    if operation == "count_rows" and not filters and not group_by and not value_column:
-        missing_field = _unavailable_field(text, columns, synonyms)
+    # "what is each student's housing status" / "show me students by their
+    # favorite color" — a lookup or breakdown on a field the workbook doesn't
+    # have. Say so instead of silently falling back to a generic count or
+    # full-roster listing that quietly drops the part of the question we
+    # couldn't resolve (caught live: "by their favorite color" was being
+    # dropped entirely, returning "300 matching rows" with no indication the
+    # grouping was never understood).
+    if operation in {"count_rows", "filtered_preview"} and not filters and not group_by and not value_column:
+        # _unresolved_group_by_phrase first: it targets "by X" specifically.
+        # _unavailable_field's "student's X" pattern can otherwise capture
+        # the "by their" connector itself as the phrase on a "students by
+        # their X" question, before ever reaching the real "X".
+        missing_field = _unresolved_group_by_phrase(text, columns, synonyms) or _unavailable_field(
+            text, columns, synonyms
+        )
         if missing_field:
             return QueryPlanResult(
                 query={},
@@ -754,6 +765,17 @@ def _unavailable_field(text: str, columns: list[str], synonyms: dict[str, Any]) 
         if not match:
             return None
         phrase = match.group(1)
+        # "which students HAVE an unusual profile" -- the word right after
+        # "students" is a verb/connective, not the start of an attribute
+        # name. Without this guard the regex swallows "have an" as the
+        # phrase and wrongly reports it as an unavailable field.
+        leading_word = phrase.split()[0]
+        if leading_word in {
+            "have", "has", "had", "are", "is", "was", "were", "do", "does", "did",
+            "who", "that", "which", "need", "needs", "want", "wants", "in", "on",
+            "at", "for", "with", "not", "can", "could", "would", "should", "will",
+        }:
+            return None
     cleaned = " ".join(word for word in phrase.split() if len(word) > 1 and word not in {"each", "the", "a", "an", "student", "students"})
     if cleaned in {"are there", "do we have", "exist", "listed"}:
         return None
@@ -766,6 +788,32 @@ def _unavailable_field(text: str, columns: list[str], synonyms: dict[str, Any]) 
             if match_column_for_concept(concept, columns, synonyms)[0]:
                 return None
     return f"{cleaned}{suffix}".strip()
+
+
+_BY_PHRASE_STOPWORDS = {"the", "a", "an", "their", "his", "her", "its", "each", "every"}
+
+
+def _unresolved_group_by_phrase(text: str, columns: list[str], synonyms: dict[str, Any]) -> str | None:
+    """If the message has a "by <phrase>" grouping/breakdown clause that
+    doesn't resolve to any real column or known concept, return the phrase so
+    the caller can decline instead of silently ignoring it -- e.g. "show me
+    students by their favorite color" -> "favorite color". Independent of
+    _detect_group_by's exclude_column logic: this only cares whether the
+    phrase resolves to *something*, not whether it was already claimed as a
+    sort target elsewhere in the same question."""
+    match = re.search(r"\bby\s+(?:their|the|his|her|its|each|every)?\s*([a-z]+(?:\s+[a-z]+)?)\b", text)
+    if not match:
+        return None
+    cleaned = " ".join(w for w in match.group(1).split() if w not in _BY_PHRASE_STOPWORDS)
+    if len(cleaned) < 3:
+        return None
+    if _resolve_phrase_to_column(cleaned, columns, synonyms, take=2, from_end=True):
+        return None
+    for concept in synonyms:
+        if any(normalize_text(term) in cleaned for term in synonyms.get(concept, [])):
+            if match_column_for_concept(concept, columns, synonyms)[0]:
+                return None
+    return cleaned
 
 
 def _detect_named_column(text: str, columns: list[str]) -> str | None:

@@ -896,6 +896,38 @@ def test_possessive_advisors_students_groups_by_advisor_not_student_id(sheets, c
     assert plan["group_by"] == "Advisor"
 
 
+def test_unresolved_by_phrase_declines_instead_of_silently_dropping_it(sheets, columns):
+    # Caught live: fixing "color" as a hard-edit trigger left this question
+    # falling through to a plain full-roster listing ("300 matching rows")
+    # with no indication the "favorite color" grouping was never understood.
+    # It should decline the same way "housing status" already does.
+    r = _route("show me students by their favorite color", sheets, {"Students": columns})
+    assert r["intent"] == "clarify"
+    assert "favorite color" in r["confirmation_reason"]
+
+
+def test_by_phrase_that_resolves_still_works_normally(sheets, columns):
+    for message in ("show me students by advisor", "list students by year", "top 10 students by GPA"):
+        r = _route(message, sheets, {"Students": columns})
+        assert r["intent"] != "clarify", message
+
+
+def test_students_verb_phrase_does_not_false_positive_as_unavailable_field(sheets, columns):
+    # Widening the unavailable-field guard to filtered_preview exposed a
+    # latent bug: "which students HAVE an unusual profile" was captured by
+    # _unavailable_field's "student(s) X" regex as the field name "have an",
+    # short-circuiting straight to a high-confidence clarification instead of
+    # ever reaching the LLM fallback path this question was meant to exercise.
+    for message in (
+        "which students have an unusual profile",
+        "which students are in Accounting",
+        "which students need extra support",
+    ):
+        r = _route(message, sheets, {"Students": columns})
+        if r["intent"] == "clarify":
+            assert "have an" not in r["confirmation_reason"], message
+
+
 def test_worst_gpa_with_category_groups_by_category_not_gpa(sheets, columns):
     """Regression: 'which major has the worst gpa' must group by Major, not GPA.
     The GPA column is the ranking value, never a grouping candidate."""
