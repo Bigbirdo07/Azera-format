@@ -1405,6 +1405,45 @@ def test_ambiguous_surname_only_still_honestly_falls_back_to_all_rows():
     assert "ALL rows" in r["confirmation_reason"]
 
 
+def test_singular_pronoun_resolves_to_last_named_person():
+    # Caught live in a full counselor conversation: a student was named
+    # several turns earlier in an unrelated QUESTION (not a watch action),
+    # then several other topics came and went, then "mark her as academic
+    # watch" -- with no name in that message -- still needs to resolve to
+    # the earlier-named student rather than falling back to whatever stale
+    # active_filters happens to be active by that point.
+    sheets, columns = _mock_named_students_sheets()
+    state = {
+        "active_filters": [
+            {"column": "Standing", "operator": "in", "value": ["Good Standing", "Bad Standing"]}
+        ],
+        "last_named_person": {"column": "Name", "operator": "equals", "value": "Samira Chen"},
+    }
+    r = _route("mark her as academic watch", sheets, {"Students": columns}, state=state)
+    assert r["plan"]["filters"] == [{"column": "Name", "operator": "equals", "value": "Samira Chen"}]
+    assert "ALL rows" not in r["confirmation_reason"]
+
+
+def test_group_pronoun_still_uses_active_filters_not_last_named_person():
+    # "them"/"these"/"those" already correctly means the active filtered
+    # GROUP -- only a singular gendered pronoun should trigger the
+    # last_named_person fallback. Must not regress the existing behavior.
+    sheets, columns = _mock_named_students_sheets()
+    state = {
+        "active_filters": [{"column": "GPA", "operator": "less_than", "value": 2.5}],
+        "last_named_person": {"column": "Name", "operator": "equals", "value": "Samira Chen"},
+    }
+    r = _route("mark them as academic watch", sheets, {"Students": columns}, state=state)
+    assert r["plan"]["filters"] == [{"column": "GPA", "operator": "less_than", "value": 2.5}]
+
+
+def test_pronoun_with_no_prior_named_person_falls_back_to_all_rows():
+    sheets, columns = _mock_named_students_sheets()
+    r = _route("mark her as academic watch", sheets, {"Students": columns})
+    assert r["plan"]["filters"] == []
+    assert "ALL rows" in r["confirmation_reason"]
+
+
 def test_reading_missing_academic_watch_does_not_route_to_edit_action():
     sheets, columns = _mock_dean_sheets()
     r = _route("how many students are on Academic Watch", sheets, {"Students": columns})

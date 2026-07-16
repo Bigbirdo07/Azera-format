@@ -1272,6 +1272,17 @@ def _named_student_filter(text: str, frame, columns: list[str]) -> dict[str, Any
     return None
 
 
+_SINGULAR_PERSON_PRONOUNS = {"her", "him", "he", "she", "his", "hers"}
+
+
+def message_refers_to_a_singular_person(text: str) -> bool:
+    """True when the message uses a singular gendered pronoun ("mark her as
+    academic watch") rather than a group reference ("mark these/them/those
+    as watch", which already correctly means the active filtered set)."""
+    tokens = set(text.split())
+    return bool(tokens & _SINGULAR_PERSON_PRONOUNS)
+
+
 def _explicit_major_value_filter(text: str, frame, columns: list[str]) -> dict[str, Any] | None:
     if not text or frame is None:
         return None

@@ -308,11 +308,18 @@ def _classify_action_intent(message, columns, state, sheet, frame=None) -> dict[
     # everyone) from a prior question was still active. An explicit name in
     # the current message is the least ambiguous signal available and must
     # win over stale context, not just fill in when active is empty.
-    from nlp.query_planner import _named_student_filter
+    from nlp.query_planner import _named_student_filter, message_refers_to_a_singular_person
 
-    named_filter = _named_student_filter(normalize_text(message), frame, columns)
+    normalized_message = normalize_text(message)
+    named_filter = _named_student_filter(normalized_message, frame, columns)
     if named_filter:
         watch_active = [named_filter]
+    elif message_refers_to_a_singular_person(normalized_message) and state.get("last_named_person"):
+        # "mark her as academic watch" -- no name in THIS message, but a
+        # singular pronoun referring back to whoever was last named. Same
+        # override priority as an explicit name: this is a more specific,
+        # less ambiguous signal than a leftover active_filters group.
+        watch_active = [dict(state["last_named_person"])]
 
     if _is_dashboard_report_request(message):
         return _result(

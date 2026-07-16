@@ -197,6 +197,20 @@ def route_message(
     sheet_columns = {sheet.name: sheet.columns for sheet in profile.sheets}
     memory = SessionMemory.from_dict(st.session_state.get("assistant_memory"))
 
+    # Track the most recently named individual student, independent of
+    # whatever else this message does, so a later singular pronoun ("mark
+    # her as academic watch") can resolve back to them even after unrelated
+    # turns in between overwrite active_filters. Skipped when this message
+    # is just a yes/no answer to a pending confirmation.
+    if not memory.pending_action:
+        from nlp.query_planner import _named_student_filter
+
+        named_person = _named_student_filter(
+            normalize_text(planner_request), loaded.sheets.get(selected_sheet), sheet_columns.get(selected_sheet, []),
+        )
+        if named_person:
+            memory.last_named_person = named_person
+
     # -1. A pending confirmation takes priority. Only yes/no resolves it.
     if memory.pending_action:
         decision = classify_confirmation(request)

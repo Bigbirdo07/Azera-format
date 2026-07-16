@@ -90,6 +90,14 @@ class SessionMemory:
     last_group_winner_value: str = ""    # was groupby_avg + limit=1, with "Education" as top
     last_row_filter: list[dict[str, Any]] = field(default_factory=list)  # row-level conditions
                                                                             # without the group_by axis
+    # Most recently mentioned specific individual (e.g. {"column": "Name",
+    # "value": "Samira Chen"}), independent of active_filters -- so a later
+    # singular pronoun ("mark her as academic watch") can resolve to that
+    # person even after several unrelated turns have overwritten
+    # active_filters. Set on ANY message that names a resolvable single
+    # student, not just watch/note actions; never auto-cleared by a topic
+    # switch, only by reset_all().
+    last_named_person: dict[str, Any] = field(default_factory=dict)
     # Free-form code-analyst conversation: a compact rolling log of recent
     # turns so the analyst can resolve follow-ups ("just the Biology ones",
     # "break that down by year"). Privacy-safe — stores the question, the answer

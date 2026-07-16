@@ -135,6 +135,21 @@ def test_safe_field_update_confirmed(chat):
     assert not chat.memory().get("pending_action")
 
 
+def test_singular_pronoun_resolves_to_earlier_named_student_in_live_chat(chat):
+    # End-to-end through the real chat panel (not just the planner in
+    # isolation): a student named in an earlier, unrelated question, then a
+    # topic switch, then "mark her as academic watch" with no name in that
+    # message -- must resolve to the earlier-named student, not fall back
+    # to whatever active_filters happens to be at that point.
+    chat.send("tell me about Chen Khan's gpa")
+    chat.send("show me Accounting students")  # unrelated topic switch
+    chat.send("mark her as academic watch")
+    pending = chat.memory().get("pending_action") or {}
+    assert pending.get("type") == "academic_watch"
+    filters = ((pending.get("routing") or {}).get("plan") or {}).get("filters")
+    assert filters == [{"column": "Name", "operator": "equals", "value": "Chen Khan"}]
+
+
 def test_pending_clears_after_failed_action(chat):
     # An empty-note edit is gated, then fails on execution; pending must clear.
     chat.send("show me Accounting students")
