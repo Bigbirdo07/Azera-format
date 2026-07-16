@@ -39,6 +39,32 @@ def test_replacement_filter(chat, gt):
     assert len(depts) == 1 and depts[0]["value"] == "Biology"
 
 
+def test_thanks_thats_helpful_does_not_misfire_as_a_followup(chat, gt):
+    # Caught live immediately after adding the "that" follow-up cue:
+    # normalize_text strips the apostrophe in "that's", leaving a stray
+    # "that s" that would otherwise match the bare "that " cue and re-run
+    # the prior query instead of just... not doing anything to a closing
+    # remark.
+    chat.send("Show me Accounting students")
+    chat.send("thanks, that's really helpful")
+    assert chat.get("assistant_mode") != "ask_question"
+
+
+def test_sort_that_follow_up_preserves_active_filters(chat, gt):
+    # Caught live: "sort that by gpa lowest first" -- bare "that", not
+    # "those"/"them"/"these" -- was classified as a brand-new question
+    # (only compound phrases like "that group" matched), so the active
+    # filters were silently dropped and the sort landed on the full
+    # unfiltered roster instead of the narrowed result.
+    chat.send("Show me Accounting students")
+    chat.send("now only below 2.5 GPA")
+    chat.send("sort that by gpa lowest first")
+    expected = int(((gt["Department"] == "Accounting") & (gt["GPA"] < 2.5)).sum())
+    assert chat.get("ask_row_count") == expected
+    assert _cols(chat.memory()["active_filters"]) == {"Department", "GPA"}
+    assert chat.memory()["active_sort"] == {"column": "GPA", "direction": "asc"}
+
+
 def test_additive_include(chat, gt):
     chat.send("Show me Accounting students")
     chat.send("include Biology too")

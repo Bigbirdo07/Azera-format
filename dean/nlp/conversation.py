@@ -83,6 +83,14 @@ _FOLLOWUP_CUES = (
     "them",
     "those",
     "these",
+    # Bare "that" ("sort THAT by gpa", "export that", "show me that sorted")
+    # -- a singular referential pronoun for the prior result, same class as
+    # the already-present "them"/"those"/"these". Caught live: "sort that by
+    # gpa lowest first" after narrowing to 2 students was classified FRESH
+    # (only the compound phrases below matched "that"), so compose_filters
+    # correctly-per-its-own-logic discarded the active filters and the
+    # follow-up silently reset to counting all 300 rows.
+    "that ",
     "that group",
     "from that group",
     "in that department",
@@ -117,6 +125,14 @@ def classify_context_action(user_request: str) -> str:
 
 
 def _looks_like_followup(text: str) -> bool:
+    # normalize_text strips apostrophes, so a closing remark like "thanks,
+    # that's really helpful" becomes "...that s really helpful" -- a stray
+    # "s" token that would otherwise make the bare "that " cue misfire on a
+    # contraction instead of an actual referential "that". Collapse it back
+    # before cue-matching (same normalize_text quirk fixed for "advisor's"
+    # elsewhere this session, here it changes a followup classification
+    # instead of a group-by target).
+    text = re.sub(r"\bthat s\b", "thats", text)
     padded = f" {text} "
     return any(text.startswith(cue) or f" {cue}" in padded for cue in _FOLLOWUP_CUES)
 
