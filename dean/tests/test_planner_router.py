@@ -1359,6 +1359,52 @@ def test_watch_action_with_no_referent_still_falls_back_to_all_rows():
     assert "ALL rows" in r["confirmation_reason"]
 
 
+def _mock_named_students_sheets():
+    frame = pd.DataFrame(
+        {
+            "Student ID": ["S1", "S2", "S3", "S4", "S5"],
+            "Name": ["Samira Chen", "Hannah Chen", "Diego Martinez", "Andre Rivera", "Layla Clark"],
+            "Standing": ["Good Standing", "Bad Standing", "Good Standing", "Bad Standing", "Good Standing"],
+            "GPA": [3.4, 2.1, 3.0, 1.8, 3.7],
+        }
+    )
+    return {"Students": frame}, list(frame.columns)
+
+
+def test_named_student_in_watch_action_targets_only_that_student():
+    sheets, columns = _mock_named_students_sheets()
+    r = _route("mark Samira Chen as academic watch", sheets, {"Students": columns})
+    assert r["intent"] == "academic_watch"
+    assert r["plan"]["filters"] == [{"column": "Name", "operator": "equals", "value": "Samira Chen"}]
+    assert "ALL rows" not in r["confirmation_reason"]
+
+
+def test_named_student_overrides_stale_active_filters_from_prior_turn():
+    # Caught live: naming a specific student was being silently ignored in
+    # favor of a leftover filter from an unrelated turn several messages
+    # earlier -- "mark Samira Chen" ended up marking all 300 students because
+    # a stale "Standing in [Good, Bad]" filter (i.e. everyone) was still
+    # active from a prior question. The name in THIS message must win.
+    sheets, columns = _mock_named_students_sheets()
+    stale_state = {
+        "active_filters": [
+            {"column": "Standing", "operator": "in", "value": ["Good Standing", "Bad Standing"]}
+        ]
+    }
+    r = _route("mark Samira Chen as academic watch", sheets, {"Students": columns}, state=stale_state)
+    assert r["plan"]["filters"] == [{"column": "Name", "operator": "equals", "value": "Samira Chen"}]
+
+
+def test_ambiguous_surname_only_still_honestly_falls_back_to_all_rows():
+    # "Chen" alone matches 2 students here -- too ambiguous to silently pick
+    # one, so this should NOT resolve to a single-student filter. Falls back
+    # to the same honest "ALL rows" disclosure as any other unparseable case.
+    sheets, columns = _mock_named_students_sheets()
+    r = _route("mark Chen as academic watch", sheets, {"Students": columns})
+    assert r["plan"]["filters"] == []
+    assert "ALL rows" in r["confirmation_reason"]
+
+
 def test_reading_missing_academic_watch_does_not_route_to_edit_action():
     sheets, columns = _mock_dean_sheets()
     r = _route("how many students are on Academic Watch", sheets, {"Students": columns})

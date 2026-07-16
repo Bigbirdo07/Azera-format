@@ -116,7 +116,7 @@ def plan_user_request(
     frame = sheets.get(selected_sheet)
 
     # 1. Action / edit intents are deterministic.
-    action = _classify_action_intent(user_message, columns, state, selected_sheet)
+    action = _classify_action_intent(user_message, columns, state, selected_sheet, frame)
     if action is not None:
         return action
 
@@ -279,7 +279,7 @@ def plan_user_request(
 # Deterministic intents -------------------------------------------------------
 
 
-def _classify_action_intent(message, columns, state, sheet) -> dict[str, Any] | None:
+def _classify_action_intent(message, columns, state, sheet, frame=None) -> dict[str, Any] | None:
     active = list(state.get("active_filters", []))
     # Bulk watch/note actions apply to the active filter context from a prior
     # turn ("show GPA below 2.0" then "mark these as watch"). A natural
@@ -298,6 +298,21 @@ def _classify_action_intent(message, columns, state, sheet) -> dict[str, Any] | 
         )
         if parsed:
             watch_active = parsed
+
+    # A student named directly in THIS message ("mark Samira Chen as
+    # academic watch") overrides everything above, including a non-empty
+    # `active`. Caught live: naming a specific student was being silently
+    # ignored in favor of a leftover filter from an unrelated turn several
+    # messages earlier -- "mark Samira Chen" ended up marking all 300
+    # students because a stale "Standing in [Good, Bad]" filter (i.e.
+    # everyone) from a prior question was still active. An explicit name in
+    # the current message is the least ambiguous signal available and must
+    # win over stale context, not just fill in when active is empty.
+    from nlp.query_planner import _named_student_filter
+
+    named_filter = _named_student_filter(normalize_text(message), frame, columns)
+    if named_filter:
+        watch_active = [named_filter]
 
     if _is_dashboard_report_request(message):
         return _result(

@@ -1249,6 +1249,29 @@ def _partial_advisor_name_filter(
     return None
 
 
+def _named_student_filter(text: str, frame, columns: list[str]) -> dict[str, Any] | None:
+    """A specific student named in the message ("mark Samira Chen as academic
+    watch") -- resolved against the roster's actual Name values, not just
+    column/synonym matching. Returns a filter only when the name resolves to
+    exactly one student, so an ambiguous first-name-only mention never
+    silently narrows to the wrong person (or expands to several).
+
+    Callers that use this for a bulk action should let a match here OVERRIDE
+    stale active_filters from an earlier, unrelated turn -- naming a specific
+    person is the strongest, least ambiguous signal in the message and a
+    leftover filter from three turns ago should never win over it.
+    """
+    if not text or frame is None:
+        return None
+    name_column = next((c for c in columns if canonical_for(c) == "full_name"), None)
+    if not name_column or name_column not in frame.columns:
+        return None
+    matches = _matching_person_values(text, frame[name_column])
+    if len(matches) == 1:
+        return {"column": name_column, "operator": "equals", "value": matches[0]}
+    return None
+
+
 def _explicit_major_value_filter(text: str, frame, columns: list[str]) -> dict[str, Any] | None:
     if not text or frame is None:
         return None
