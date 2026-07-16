@@ -70,6 +70,12 @@ def is_correction_message(message: str) -> bool:
 _CORRECTION_STRIP_PREFIXES = (
     "no, i mean ",
     "no i mean ",
+    "no sorry, i meant ",
+    "no sorry i meant ",
+    "no sorry, ",
+    "no sorry ",
+    "sorry, i meant ",
+    "sorry i meant ",
     "no actually, ",
     "no actually ",
     "no, ",

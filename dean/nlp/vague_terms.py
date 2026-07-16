@@ -106,7 +106,7 @@ def resolve_vague_term(
 
     risk = _find_phrase(text, VAGUE_RISK_PHRASES)
     if risk:
-        return _resolve_risk(risk, sheet, columns, categorical_values or {})
+        return _resolve_risk(risk, sheet, columns, categorical_values or {}, text=text)
 
     advisor_load = _find_phrase(text, VAGUE_ADVISOR_LOAD_PHRASES)
     if advisor_load:
@@ -148,9 +148,26 @@ def _matched_risk_values(values: list[str]) -> list[str]:
     return [v for v in values if normalize_text(v) in risk]
 
 
-def _resolve_risk(phrase, sheet, columns, categorical_values) -> VagueResolution:
+_ATTENDANCE_QUALIFIER_WORDS = ("attendance", "absent", "absences", "attending")
+_GPA_EXCLUSION_PHRASES = ("not gpa", "not by gpa", "not on gpa", "not grades", "not grade")
+
+
+def _resolve_risk(phrase, sheet, columns, categorical_values, *, text: str = "") -> VagueResolution:
+    # A qualifier in the surrounding message ("struggling WITH ATTENDANCE",
+    # "... not gpa") should redirect the definition instead of always
+    # defaulting to Academic Status / GPA. Caught live: "no sorry I meant
+    # struggling with attendance not gpa" kept resolving to the GPA<2.5
+    # definition from the turn before -- the correction was silently ignored
+    # because this function had no attendance-flavored branch at all.
+    if text and any(word in text for word in _ATTENDANCE_QUALIFIER_WORDS):
+        attendance_resolution = _resolve_attendance_risk(phrase, sheet, columns)
+        if attendance_resolution is not None:
+            return attendance_resolution
+
+    gpa_excluded = bool(text) and any(p in text for p in _GPA_EXCLUSION_PHRASES)
+
     status_column = _find_column(columns, "Academic Status", "Status")
-    gpa_column = _find_column(columns, "GPA")
+    gpa_column = None if gpa_excluded else _find_column(columns, "GPA")
 
     if status_column:
         # If we can see the column's distinct values, narrow to ones that
@@ -207,6 +224,63 @@ def _resolve_risk(phrase, sheet, columns, categorical_values) -> VagueResolution
             "Should I use GPA, academic status, credits, advisor notes, or another column?"
         ),
     )
+
+
+def _resolve_attendance_risk(phrase, sheet, columns) -> VagueResolution | None:
+    """Attendance-flavored definition of a vague risk phrase. Same column
+    preference as core.query_planner's _attendance_predicate_filter: a
+    precomputed category/risk column over a raw rate threshold, so both
+    paths agree on what "attendance risk" means for a given workbook."""
+    category_column = _find_column(columns, "Attendance Category")
+    if category_column:
+        return VagueResolution(
+            matched_phrase=phrase, category="risk",
+            query={
+                "request_type": "ask_question",
+                "operation": "filtered_preview",
+                "sheet": sheet,
+                "filters": [{"column": category_column, "operator": "equals",
+                            "value": "Needs Attendance Support"}],
+                "group_by": "", "value_column": "", "sort": None, "limit": None,
+                "plain_english_question": f"students who appear {phrase} (attendance)",
+                "confidence": 0.7,
+            },
+            assumption=f"I interpreted '{phrase}' as students with {category_column} = Needs Attendance Support.",
+            alternatives=["Now use GPA below 2.5 instead", "Now use Attendance Rate below 90% instead"],
+        )
+    risk_column = _find_column(columns, "Attendance Risk")
+    if risk_column:
+        return VagueResolution(
+            matched_phrase=phrase, category="risk",
+            query={
+                "request_type": "ask_question",
+                "operation": "filtered_preview",
+                "sheet": sheet,
+                "filters": [{"column": risk_column, "operator": "equals", "value": True}],
+                "group_by": "", "value_column": "", "sort": None, "limit": None,
+                "plain_english_question": f"students who appear {phrase} (attendance)",
+                "confidence": 0.7,
+            },
+            assumption=f"I interpreted '{phrase}' as students flagged {risk_column}.",
+            alternatives=["Now use GPA below 2.5 instead"],
+        )
+    rate_column = _find_column(columns, "Attendance Rate", "Attendance %")
+    if rate_column:
+        return VagueResolution(
+            matched_phrase=phrase, category="risk",
+            query={
+                "request_type": "ask_question",
+                "operation": "filtered_preview",
+                "sheet": sheet,
+                "filters": [{"column": rate_column, "operator": "less_than", "value": 90}],
+                "group_by": "", "value_column": "", "sort": None, "limit": None,
+                "plain_english_question": f"students who appear {phrase} (attendance)",
+                "confidence": 0.7,
+            },
+            assumption=f"I interpreted '{phrase}' as students with {rate_column} below 90%.",
+            alternatives=["Now use GPA below 2.5 instead", "Now use 80% instead"],
+        )
+    return None
 
 
 def _resolve_advisor_load(phrase, sheet, columns) -> VagueResolution:

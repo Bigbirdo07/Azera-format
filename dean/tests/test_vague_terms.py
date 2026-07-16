@@ -56,6 +56,40 @@ def test_struggling_clarifies_when_no_supporting_columns():
     assert res.clarification
 
 
+def test_struggling_with_attendance_qualifier_uses_attendance_not_gpa():
+    # Caught live: "struggling with attendance not gpa" kept resolving to
+    # the GPA<2.5 default -- _resolve_risk had no attendance-flavored branch
+    # at all, so a correction naming a different dimension was silently
+    # ignored no matter how explicitly it was phrased.
+    columns = COLUMNS_FULL + ["Attendance Category"]
+    res = resolve_vague_term(message="struggling with attendance not gpa",
+                             sheet="Students", columns=columns, categorical_values={})
+    assert res is not None and res.has_plan
+    assert res.query["filters"] == [
+        {"column": "Attendance Category", "operator": "equals", "value": "Needs Attendance Support"}
+    ]
+    assert "Attendance Category" in res.assumption
+
+
+def test_struggling_not_gpa_without_attendance_column_asks_instead_of_using_gpa():
+    # No attendance qualifier resolves, and GPA is explicitly excluded -- must
+    # not silently fall back to the thing the user just ruled out.
+    res = resolve_vague_term(message="struggling not gpa",
+                             sheet="Students", columns=COLUMNS_GPA_ONLY, categorical_values={})
+    assert res is not None
+    assert res.has_plan is False
+    assert res.clarification
+
+
+def test_plain_struggling_still_defaults_to_gpa():
+    # Guardrail: the attendance/gpa-exclusion qualifiers must not fire on the
+    # unqualified case.
+    res = resolve_vague_term(message="who is struggling",
+                             sheet="Students", columns=COLUMNS_GPA_ONLY, categorical_values={})
+    assert res is not None and res.has_plan
+    assert res.query["filters"][0]["column"] == "GPA"
+
+
 def test_overloaded_advisors_groups_by_advisor_count():
     res = resolve_vague_term(message="show me overloaded advisors",
                              sheet="Students",
@@ -155,6 +189,17 @@ def test_extract_strips_correction_prefix():
     assert extract_corrected_request("no, I mean students on probation") == "students on probation"
     assert extract_corrected_request("Actually, show me seniors only") == "show me seniors only"
     assert extract_corrected_request("I meant GPA below 2.0") == "GPA below 2.0"
+
+
+def test_extract_strips_no_sorry_i_meant_prefix():
+    # Caught live: "no sorry I meant ..." wasn't in the strip list at all
+    # (only "no, i mean"/"no i mean" without "sorry") -- the prefix rode
+    # along into the planner instead of being stripped.
+    assert (
+        extract_corrected_request("no sorry I meant struggling with attendance not gpa")
+        == "struggling with attendance not gpa"
+    )
+    assert extract_corrected_request("sorry, I meant seniors only") == "seniors only"
 
 
 def test_extract_passes_through_normal_message():
