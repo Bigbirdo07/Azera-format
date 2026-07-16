@@ -1276,6 +1276,31 @@ def test_show_students_majoring_in_value_stays_row_preview():
     assert {"column": "Major", "operator": "equals", "value": "Data Analytics"} in p["filters"]
 
 
+def test_inline_condition_on_watch_action_targets_matching_students_not_all():
+    # Caught live: "mark these as watch" is designed to act on the active
+    # filter context from a PRIOR turn. A natural single-sentence phrasing
+    # with its own inline condition had no prior turn to draw from, so the
+    # filter silently dropped and the action defaulted to ALL rows -- the
+    # confirmation text said so, but a user who didn't read carefully could
+    # confirm marking every student instead of the ~46 GPA-below-2.0 ones.
+    sheets, columns = _mock_dean_sheets()
+    r = _route("Mark students with GPA below 2.0 as Academic Watch", sheets, {"Students": columns})
+    assert r["intent"] == "academic_watch"
+    assert r["plan"]["filters"] == [{"column": "GPA", "operator": "less_than", "value": 2.0}]
+    assert "ALL rows" not in r["confirmation_reason"]
+    assert "GPA" in r["confirmation_reason"]
+
+
+def test_watch_action_with_no_referent_still_falls_back_to_all_rows():
+    # "these" with no prior filter turn genuinely has nothing to parse --
+    # ALL rows is the honest answer here, not a regression.
+    sheets, columns = _mock_dean_sheets()
+    r = _route("Mark these students as Academic Watch", sheets, {"Students": columns})
+    assert r["intent"] == "academic_watch"
+    assert r["plan"]["filters"] == []
+    assert "ALL rows" in r["confirmation_reason"]
+
+
 def test_reading_missing_academic_watch_does_not_route_to_edit_action():
     sheets, columns = _mock_dean_sheets()
     r = _route("how many students are on Academic Watch", sheets, {"Students": columns})

@@ -283,6 +283,23 @@ def plan_user_request(
 
 def _classify_action_intent(message, columns, state, sheet) -> dict[str, Any] | None:
     active = list(state.get("active_filters", []))
+    # Bulk watch/note actions apply to the active filter context from a prior
+    # turn ("show GPA below 2.0" then "mark these as watch"). A natural
+    # single-sentence phrasing with an inline condition ("mark students with
+    # GPA below 2.0 as academic watch") has no prior turn to draw from --
+    # without this, `active` stays empty and the action silently defaults to
+    # ALL rows (the confirmation text does disclose this, but a user who
+    # doesn't read carefully could confirm an unintended bulk action). Parse
+    # the same message for a filter so it targets the right students.
+    watch_active = active
+    if not active:
+        from nlp.query_planner import _detect_filters
+
+        parsed = _detect_filters(
+            normalize_text(message), columns, load_synonyms_with_learned(), original_text=message,
+        )
+        if parsed:
+            watch_active = parsed
 
     if _is_dashboard_report_request(message):
         return _result(
@@ -349,11 +366,11 @@ def _classify_action_intent(message, columns, state, sheet) -> dict[str, Any] | 
         # Same workflow as academic_watch but writes to the Attendance Watch
         # column. Shares the confirm + write-new-workbook + audit pipeline.
         return _result(plan_source="rules", intent="attendance_watch", confidence=1.0,
-                       plan={"filters": active, "sheet": sheet, "value": "Yes",
+                       plan={"filters": watch_active, "sheet": sheet, "value": "Yes",
                              "column_name": "Attendance Watch"},
                        llm_used=False, requires_confirmation=True, pending_type="attendance_watch",
                        confirmation_reason=(
-                           f"Confirmation needed. This will mark {_scope(active)} as "
+                           f"Confirmation needed. This will mark {_scope(watch_active)} as "
                            "Attendance Watch in a NEW workbook. The original workbook will "
                            "not be modified."
                        ))
@@ -363,10 +380,10 @@ def _classify_action_intent(message, columns, state, sheet) -> dict[str, Any] | 
         # "flag them" / "put them on watch". Operates on the currently filtered
         # student set, requires confirmation, writes a NEW workbook.
         return _result(plan_source="rules", intent="academic_watch", confidence=1.0,
-                       plan={"filters": active, "sheet": sheet, "value": "Yes"},
+                       plan={"filters": watch_active, "sheet": sheet, "value": "Yes"},
                        llm_used=False, requires_confirmation=True, pending_type="academic_watch",
                        confirmation_reason=(
-                           f"Confirmation needed. This will mark {_scope(active)} as "
+                           f"Confirmation needed. This will mark {_scope(watch_active)} as "
                            "Academic Watch in a NEW workbook. The original workbook will "
                            "not be modified."
                        ))
@@ -375,9 +392,9 @@ def _classify_action_intent(message, columns, state, sheet) -> dict[str, Any] | 
         note = parse_note(message)
         note_part = f' "{note}"' if note else ""
         return _result(plan_source="rules", intent="note_edit", confidence=1.0,
-                       plan={"note": note, "filters": active, "sheet": sheet},
+                       plan={"note": note, "filters": watch_active, "sheet": sheet},
                        llm_used=False, requires_confirmation=True, pending_type="note_edit",
-                       confirmation_reason=f"This will add a note{note_part} to {_scope(active)} and save a "
+                       confirmation_reason=f"This will add a note{note_part} to {_scope(watch_active)} and save a "
                        "NEW workbook (the original is never changed). Confirm?")
 
     if has_hard_edit_cue(message):
