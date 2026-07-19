@@ -1444,6 +1444,36 @@ def test_pronoun_with_no_prior_named_person_falls_back_to_all_rows():
     assert "ALL rows" in r["confirmation_reason"]
 
 
+def test_historical_comparison_declines_instead_of_answering_a_stale_question():
+    # Caught live: "has Samira Chen's gpa gotten better or worse since last
+    # semester" found no filter/group signal in the text (there's nothing to
+    # parse -- the question is about CHANGE over time, not a column), and the
+    # resulting bare plan silently inherited a stale active_group_by from an
+    # earlier, unrelated turn instead of declining -- answering a completely
+    # different question with a straight face ("Good Standing has the
+    # highest Count") rather than saying it doesn't have the data.
+    sheets, columns = _mock_named_students_sheets()
+    state = {
+        "active_filters": [
+            {"column": "Standing", "operator": "in", "value": ["Good Standing", "Bad Standing"]}
+        ],
+        "active_group_by": "Standing",
+    }
+    r = _route(
+        "has Samira Chen's gpa gotten better or worse since last semester",
+        sheets, {"Students": columns}, state=state,
+    )
+    assert r["intent"] == "clarify"
+    assert "prior-term" in r["confirmation_reason"] or "historical" in r["confirmation_reason"]
+
+
+def test_historical_comparison_phrase_does_not_false_positive_on_normal_questions():
+    sheets, columns = _mock_named_students_sheets()
+    for message in ("what is her current gpa", "compare good standing vs bad standing students"):
+        r = _route(message, sheets, {"Students": columns})
+        assert r["intent"] != "clarify" or "prior-term" not in (r["confirmation_reason"] or "")
+
+
 def test_reading_missing_academic_watch_does_not_route_to_edit_action():
     sheets, columns = _mock_dean_sheets()
     r = _route("how many students are on Academic Watch", sheets, {"Students": columns})

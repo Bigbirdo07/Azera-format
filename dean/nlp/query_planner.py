@@ -140,6 +140,19 @@ def _rule_plan(user_request: str, sheet: str, columns: list[str], frame=None) ->
             ),
         )
 
+    if _asks_for_historical_comparison(text):
+        return QueryPlanResult(
+            query={},
+            confidence=0.9,
+            source="rule",
+            needs_clarification=True,
+            clarification_question=(
+                "This workbook only has a single current snapshot -- no prior-term or "
+                "historical records -- so I can't tell whether something has changed over "
+                "time. I can show you the current value instead."
+            ),
+        )
+
     comparison_query = _detect_cohort_comparison(text, sheet, columns, frame, synonyms)
     if not comparison_query:
         comparison_query = _detect_value_cohort_comparison(text, sheet, columns, frame)
@@ -834,6 +847,34 @@ def _term_in_text(term: str, text: str) -> bool:
         return False
     pattern = r"(?<!\w)" + r"\s+".join(re.escape(part) for part in normalized.split()) + r"(?!\w)"
     return bool(re.search(pattern, text))
+
+
+_HISTORICAL_COMPARISON_PHRASES = (
+    "since last semester", "since last term", "since last year",
+    "since the beginning of the year", "since the start of the year",
+    "compared to last semester", "compared to last term", "compared to last year",
+    "compared with last semester", "compared with last term", "compared with last year",
+    "vs last semester", "vs last term", "vs last year",
+    "gotten better", "gotten worse", "better or worse",
+    "improved since", "improving over", "declined since", "declining over",
+    "trend over time", "trend over the year", "over the past year", "over the past semester",
+    "this semester vs", "this term vs", "this year vs",
+    "last semester's", "last term's", "prior semester", "prior term",
+    "previous semester", "previous term", "previous year's",
+    "year over year", "semester over semester", "term over term",
+    "historical trend", "historical data", "historical record", "historical gpa",
+)
+
+
+def _asks_for_historical_comparison(text: str) -> bool:
+    """True when the question needs prior-term/historical data this app
+    doesn't have -- a single-snapshot workbook, not a longitudinal record.
+    Caught live: "has Samira Chen's gpa gotten better or worse since last
+    semester" found no filter/group signal in the text (there's nothing to
+    parse -- the question isn't about a column, it's about CHANGE over
+    time), and the resulting bare plan silently inherited a stale group_by
+    from an unrelated earlier turn instead of declining."""
+    return any(phrase in text for phrase in _HISTORICAL_COMPARISON_PHRASES)
 
 
 def _watch_column_available(text: str, columns: list[str]) -> bool:
