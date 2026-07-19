@@ -248,6 +248,21 @@ def plan_user_request(
             band="low",
         )
 
+    # Compound conditions spanning both subsystems ("doing well DESPITE low
+    # attendance"): the deterministic rule already grounded one dimension
+    # (attendance, via _detect_filters) which is why it superseded the
+    # vague-term match above -- but that meant the vague-term's OWN
+    # dimension ("doing well" -> GPA >= 3.5) was silently dropped instead of
+    # combined. Merge it in when the two name different columns, so both
+    # halves of the condition survive instead of only whichever subsystem
+    # happened to "win".
+    if vague is not None and vague.has_plan and rule_usable and rule.query.get("filters"):
+        vague_filters = vague.query.get("filters") or []
+        existing_columns = {f.get("column") for f in rule.query["filters"]}
+        mergeable = [f for f in vague_filters if f.get("column") not in existing_columns]
+        if mergeable:
+            rule.query["filters"] = list(rule.query["filters"]) + mergeable
+
     rule_band = classify_confidence(rule.confidence)
     grounded = grounded or followup_refine
 

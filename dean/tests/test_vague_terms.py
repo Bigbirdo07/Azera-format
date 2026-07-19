@@ -153,6 +153,50 @@ def test_struggling_clarifies_when_workbook_lacks_supporting_columns(sheets):
     assert "definition" in (routing["confirmation_reason"] or "").lower()
 
 
+def test_doing_well_merges_with_a_rule_grounded_filter(sheets, columns):
+    # Caught live: "doing well despite low attendance" (turn 21 of a full
+    # counselor session) kept only the attendance half -- "doing well" is
+    # owned by the vague-term resolver (VAGUE_TOP_PHRASES), "low attendance"
+    # by the deterministic rule planner's own predicate detection, and
+    # whichever subsystem's match was already grounded with filters
+    # unconditionally won, silently dropping the other's dimension.
+    routing = _route("show me Accounting students who are doing well", sheets, columns)
+    filters = {f["column"]: f for f in routing["plan"]["filters"]}
+    assert filters["Department"]["value"] == "Accounting"
+    assert filters["GPA"] == {"column": "GPA", "operator": "greater_or_equal", "value": 3.5}
+
+
+def test_doing_well_despite_low_attendance_merges_both_dimensions():
+    # The exact live scenario, with an Attendance Category column present.
+    import pandas as pd
+
+    frame = pd.DataFrame({
+        "Student ID": ["S1", "S2", "S3"],
+        "Name": ["Alicia Gomez", "Diego Ruiz", "Priya Shah"],
+        "GPA": [3.8, 2.1, 3.9],
+        "Attendance Category": ["Needs Attendance Support", "Great Attendance", "Needs Attendance Support"],
+    })
+    routing = _route(
+        "which of my advisees are doing well despite low attendance",
+        {"Students": frame}, list(frame.columns),
+    )
+    filters = {f["column"]: f for f in routing["plan"]["filters"]}
+    assert filters["Attendance Category"]["value"] == "Needs Attendance Support"
+    assert filters["GPA"] == {"column": "GPA", "operator": "greater_or_equal", "value": 3.5}
+
+
+def test_plain_doing_well_still_uses_the_richer_vague_term_path(sheets, columns):
+    # Guardrail: an UNQUALIFIED "doing well" (no other rule-grounded filter
+    # to merge with) must keep going through the vague-term resolver's own
+    # response -- assumption note, alternatives, descending sort -- not
+    # regress to a plain rule-only filter.
+    routing = _route("who is doing well", sheets, columns)
+    assert routing["band"] == "medium"
+    assert routing["assumption_note"]
+    assert routing["alternatives"]
+    assert routing["plan"]["filters"] == [{"column": "GPA", "operator": "greater_or_equal", "value": 3.5}]
+
+
 def test_overloaded_advisors_via_router(sheets, columns):
     routing = _route("show me overloaded advisors", sheets, columns)
     assert routing["intent"] == "query"
