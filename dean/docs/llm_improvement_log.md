@@ -193,3 +193,102 @@ Failure analysis (this is the actionable part):
    later (adds a model).
 6. **Release gate.** Define a min pass-rate that blocks a release; wire into
    `release_checkpoint/`.
+
+---
+
+## Session — 2026-07 (Skyward schema, pivot routing, dead-code audit, live-testing arc)
+
+Test count: 658 → **703**, all passing throughout. Everything below was found
+either by grepping for actual usage before deleting code, or by literally
+driving the running app (Streamlit `AppTest`, no browser) with real questions
+and reading what came back — not by reasoning about the code in the abstract.
+Several of the bugs below only surfaced that way: they passed the unit-test
+suite in isolation and only broke in a real multi-turn session.
+
+### Skyward field mapping
+Read the actual Skyward "Standards Gradebook" teacher guide (not guessed) and
+built `knowledge/skyward_field_map.json` mapping confirmed Class Roster /
+Student Information fields to Dean's canonical schema, flagged `mapped` /
+`needs_join` / `unresolved`, with open questions for when a real export shows
+up (chiefly: is Teacher joinable to the roster, or a separate schedule sheet?).
+Found and fixed two real privacy gaps along the way: a column literally named
+**"Discipline Information"** (Skyward's actual field for behavioral records)
+wasn't being flagged sensitive, and **"Emergency Contact"** had no matching
+sensitivity keyword at all — both now redact by default.
+
+### Pivot routing widened
+`nlp/planner_router.py` now recognizes two-dimension breakdowns without the
+literal word "pivot" ("average GPA by advisor and standing"), gated by a
+strict validity check so it can't hijack a single-group question or produce
+nonsense pairings (GPA × Name). Chasing this down live-testing surfaced two
+more bugs: `ui/figures_panel.py`'s chart detector was intercepting these
+questions *before* the pivot planner ever saw them (fixed — a two-dimension
+request now defers to pivot, same as the literal word "pivot" already did),
+and `core/query_engine.py` was missing a caveat explaining that an imported
+status field (e.g. Standing) isn't derived from the metric shown — first
+version of that fix was itself too broad and let Dean's own unrelated "Risk
+Reason" column suppress it; tightened to require a reason column tied to the
+specific field.
+
+### Two live capability sweeps (18 + 20 questions)
+Found and fixed: `_detect_cohort_comparison` only ever compared two ADVISOR
+names ("compare Good Standing vs Bad Standing" silently dropped half the
+comparison) — generalized to any column's values. `data_quality_summary` was
+throwing `pyarrow.lib.ArrowInvalid` internally on every run (a stray `""`
+string mixed into an otherwise-numeric column), silently caught and "fixed"
+by Streamlit — a real crash the app was masking, now fixed at the source.
+"Which students are missing SAT scores?" declined instead of answering,
+because the blank-value filter detector only matched literal column headers,
+not a generic phrase — added concept/synonym resolution as a fallback.
+A `normalize_text` quirk (apostrophe → space) also surfaced twice this
+session: `"advisor's"` → `"advisor s"` was displacing the real noun in
+group-by phrase resolution ("which advisor's students have the lowest
+average GPA" was grouping by Student ID), and later `"that's"` → `"that s"`
+falsely tripped a new follow-up cue (see below) — same root cause, two
+different symptoms, both fixed.
+
+### Dead-code audit
+Grepped the whole repo (not single-file static analysis, which produces
+false positives for cross-module callers) for zero call sites before
+deleting anything, re-swept after each batch since removing a dead
+function's only caller often orphans its own helpers. Removed **2,391
+lines**: `app.py` had accumulated a full parallel UI nothing pointed to
+anymore (old tabbed workbook panel, a pre-chat "Action Builder" form,
+~29 orphaned functions — went from 54 top-level functions to 25);
+`ui/chat_panel.py`'s ~500-line "Live Output panel" rendering cluster,
+superseded by the session-workbook path; `ui/results_panel.py` deleted
+entirely (164 lines, only ever imported by the now-removed
+`render_modifications_panel`); ~10 small dead functions in `core/*.py`
+found via an asymmetric pattern (a live sibling method next to a dead one,
+e.g. `attendance_available` used, `assessment_available` never called).
+Deliberately **not** removed: `build_dynamic_suggestions` /
+`askable_categories` (a workbook-tailored suggested-questions panel) —
+well-tested, working code, but an explicit code comment shows it was
+*deliberately* removed from the UI in a past simplification, not
+accidentally orphaned, so reversing that is a product decision left alone.
+
+### Live guidance-counselor session — the main event
+Played counselor with a Skyward-shaped roster (300 students, GPA/attendance/
+SAT/PSAT/Standing/Advisor) in one continuous 24-turn conversation against the
+real running app, deliberately mixing realistic caseload questions, follow-up
+drilldowns, corrections, informal phrasing, and questions that probe for
+missing capabilities. Found four real bugs, fixed and verified against the
+**exact same unmodified 24-turn session** after each fix (not a fresh
+synthetic repro) — a fifth item (unsupported scheduling/email/reminders)
+declines correctly and was left as a capability gap, not a bug.
+
+| # | Found | Root cause | Fix |
+|---|---|---|---|
+| 1 | 🔴 "Mark Samira Chen as academic watch" marked **all 300 students** | Watch/note actions never did name-based matching against actual student data — only column filters ("GPA below 2.0") or stale `active_filters` | Added `_named_student_filter`, reusing the existing advisor-name matcher (`_matching_person_values`); an explicit name overrides stale context |
+| 1b | Same danger via **pronoun**: "mark her as academic watch" (referring to a student named several turns earlier) still marked everyone | Fix above only caught an explicit name in the current message, not a reference to one | Added `SessionMemory.last_named_person`, tracked independently of `active_filters` on *any* message that names a resolvable student; a singular pronoun ("her/him/he/she") falls back to it |
+| 2 | "Sort that by gpa lowest first" after narrowing to 2 students reset to counting all 300 | Bare "that" wasn't in `_FOLLOWUP_CUES` (only "them"/"those"/"these" and compound phrases like "that group" were) | Added bare `"that "` cue — which immediately exposed a second bug: `"that's"` → `"that s"` (apostrophe-stripping) falsely matched it, misfiring on "thanks, that's helpful"; fixed by collapsing the artifact before cue-matching |
+| 3 | "No sorry I meant struggling with attendance not gpa" kept the GPA definition from the turn before | `_resolve_risk` (the "struggling"/"at risk" handler) only ever falls through Academic Status → GPA, no attendance branch, no way to exclude GPA | Added `_resolve_attendance_risk`, checked first on an attendance-flavored qualifier; a "not gpa" exclusion now asks for clarification instead of silently using GPA anyway |
+| 4 | "Which of my advisees are doing well despite low attendance" answered attendance only, "doing well" silently dropped | "Doing well" is owned by the vague-term resolver, "low attendance" by the deterministic rule planner — an all-or-nothing handoff between the two discarded whichever one didn't "win" | When the rule planner supersedes the vague-term match, merge the two filter sets instead of discarding one (verified it generalizes beyond the reported case) |
+| 5 | "Has her GPA improved since last semester" answered a stale, unrelated question ("Good Standing has the highest Count") instead of declining | No filter/group signal in the text at all (it's a question about change over time, not a column) — the resulting bare plan silently inherited leftover `active_group_by` from an earlier turn | Added `_asks_for_historical_comparison`, a phrase-based guard that declines with a specific explanation ("single current snapshot, no prior-term records") instead of falling through to stale state |
+
+Every fix in this table was: reproduced in isolation first, verified against
+false-positive/guardrail cases, run against the full suite, and re-verified
+against the *exact original unmodified session* before being called done —
+several of these (1b, and the `"that's"` regression inside fix #2) were only
+caught because "did it actually work in the live session" was checked rather
+than trusting the isolated fix.
