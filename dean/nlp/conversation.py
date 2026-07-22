@@ -203,6 +203,37 @@ def has_hard_edit_cue(user_request: str) -> bool:
     return False
 
 
+# Requires the action-verb-plus-object shape (not a bare keyword), so an
+# incidental "call"/"send"/"email" in an ordinary question doesn't
+# false-trigger -- e.g. "students missing an email" or "show me email
+# addresses" have no "every"/"all" + recipient-group object and are left
+# alone. "duplicate"/"dupe" is excluded from the delete pattern entirely so
+# the real, supported "remove duplicate rows" request (a _HARD_EDIT_CUES
+# entry) is never caught here.
+_UNSUPPORTED_DELETE_RE = re.compile(
+    r"\b(?:delete|remove all|erase all)\b.*\b(?:students?|rows?|records?|roster)\b"
+)
+_UNSUPPORTED_SEND_RE = re.compile(
+    r"\b(?:email|text|call|message|notify)\b.*\b(?:every|all)\b.*"
+    r"\b(?:students?|advisors?|parents?|guardians?)\b"
+    r"|\bsend\b.*\b(?:email|text|message)\b"
+)
+
+
+def unsupported_action_reason(user_request: str) -> str | None:
+    """Returns an explanation if the request asks Dean to do something it
+    genuinely cannot -- delete rows by filter (no such capability exists;
+    the only real delete action is remove_duplicates) or send communications
+    (email/text/call students, advisors, or parents) -- else None."""
+    text = normalize_text(user_request)
+    if "duplicate" not in text and "dupe" not in text and _UNSUPPORTED_DELETE_RE.search(text):
+        return ("I can't delete rows from the workbook. I can filter, export, or mark "
+                "records for review, but the original data stays intact.")
+    if _UNSUPPORTED_SEND_RE.search(text):
+        return "I can't send emails, texts, or calls. I can find and show you the matching students instead."
+    return None
+
+
 _ADDITIVE_CUES = ("also", "include", " too", "as well", "add ", "plus ", "along with")
 # Standalone-word cues that would otherwise match inside other words
 # (e.g. "or" inside "professor"). Checked as whole tokens.

@@ -44,7 +44,8 @@ from ui.figures_panel import (
 )
 from ui.privacy_admin import render_privacy_admin
 from ui.health_check import render_workbook_health_check
-from ui.settings_panel import render_settings_panel
+from ui.settings_panel import load_settings, render_settings_panel
+from ui.system_resources_panel import render_system_resources_panel
 from core.risk_settings import load_risk_settings
 from ui.workbook_workspace import render_workbook_workspace
 
@@ -981,12 +982,10 @@ def main() -> None:
     manager.update_state(settings, show_debug)
     settings_status = manager.status
 
-    if settings.get("strict_privacy_mode", True):
-        settings = {**settings, "use_local_llm": False, "llm_explanations_enabled": False}
-
     # Warm the local model once per session so the first question doesn't eat the
     # 25-40s cold-start. Backgrounded and best-effort; skipped when the local LLM
-    # is off (including under strict privacy, handled just above).
+    # is off. Strict privacy mode restricts row/field access (see core.llm_config),
+    # it does not disable the model itself.
     if settings.get("use_local_llm") and not st.session_state.get("_ollama_warmed"):
         from nlp.local_model import warm_model
 
@@ -1016,7 +1015,7 @@ def main() -> None:
     render_app_header(loaded, profile, active_sheet)
 
     # Display warning if local LLM was requested but is currently running in rule fallback mode
-    if settings.get("use_local_llm", False) and not settings.get("strict_privacy_mode", True):
+    if settings.get("use_local_llm", False):
         if settings_status.mode == "rule_only" and settings_status.error_message:
             st.warning(f"Local LLM is unavailable: {settings_status.error_message}. Operating in rule-only mode.")
 
@@ -1558,9 +1557,16 @@ def render_sidebar_advanced(permissions, privacy_settings):
         privacy_settings = render_privacy_admin()
         render_learning_admin()
         render_user_admin()
+        render_system_resources_panel()
     else:
-        settings = {"strict_privacy_mode": True, "use_local_llm": False, "ollama_model": "llama3.2:3b"}
-        st.caption("Privacy mode is on. Ask an admin to change advanced settings.")
+        # Non-admins can't EDIT the settings panel, but they must still get
+        # whatever the admin actually configured -- not a hardcoded
+        # strict-mode override. Previously this silently forced
+        # use_local_llm=False for every non-admin session regardless of the
+        # saved config, which meant the AI layer was effectively "admin-only"
+        # even when a site admin had deliberately turned it on for everyone.
+        settings = load_settings()
+        st.caption("Using this workspace's configured settings. Ask an admin to change them.")
     with st.expander("Appearance", expanded=False):
         current = active_theme()
         choice = st.radio(

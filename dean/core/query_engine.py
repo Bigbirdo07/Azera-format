@@ -1300,6 +1300,12 @@ def _membership_mask(series: pd.Series, value: Any) -> pd.Series:
 def _text_eq(series: pd.Series, value: Any) -> pd.Series:
     if pd.api.types.is_object_dtype(series) or pd.api.types.is_string_dtype(series):
         return series.astype(str).str.casefold() == str(value).casefold()
+    if pd.api.types.is_numeric_dtype(series) and not isinstance(value, (int, float)):
+        # Filter values from the query planner are regex-captured text, so an
+        # "equals" filter on an already-numeric column (e.g. an integer Grade
+        # level) arrives as a string ("9") and silently matches nothing
+        # against int64 9 without this coercion.
+        return series == pd.to_numeric(value, errors="coerce")
     return series == value
 
 

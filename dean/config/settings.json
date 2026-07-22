@@ -7,5 +7,5 @@
   "planner_full_row_access": true,
   "local_llm_full_row_access": true,
   "local_llm_all_matching_rows": true,
-  "code_analyst_enabled": true
+  "interaction_logging_enabled": true
 }

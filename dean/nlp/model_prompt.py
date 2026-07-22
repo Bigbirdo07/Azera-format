@@ -543,6 +543,8 @@ def build_safe_planner_prompt(
     canonical_map: dict[str, str] | None = None,
     safe_values: dict[str, list[str]] | None = None,
     row_context: dict[str, Any] | None = None,
+    clarification_hint: dict[str, Any] | None = None,
+    conversation_hint: dict[str, Any] | None = None,
 ) -> str:
     detected_capabilities = _detected_capabilities(canonical_map or {})
     payload = {
@@ -554,6 +556,32 @@ def build_safe_planner_prompt(
         "safe_categorical_values": safe_values or {},
         "workbook_row_context": row_context or {},
         "active_filters": active_filters or [],
+        "conversation_turn_hint": (
+            {
+                "note": "The app will always merge your filters with the active ones below "
+                "according to this turn type — 'followup' means the new question refines/adds "
+                "to what's already active, 'fresh' means it replaces it, 'reset'/'clear' means "
+                "the active filters are being dropped. Plan your own filters to already agree "
+                "with this instead of treating every turn as independent.",
+                "turn_type": conversation_hint.get("turn_type"),
+                "additive": conversation_hint.get("additive"),
+                "active_filters_description": conversation_hint.get("active_filters_description"),
+            }
+            if conversation_hint
+            else None
+        ),
+        "rules_engine_clarification_hint": (
+            {
+                "note": "The deterministic parser found this request ambiguous and would have "
+                "asked the question below. Use conversation context (active_filters, prior "
+                "turns) to resolve it yourself if you can; otherwise return intent=\"clarify\" "
+                "with your own clarification_question.",
+                "question": clarification_hint.get("question"),
+                "options": clarification_hint.get("options", []),
+            }
+            if clarification_hint
+            else None
+        ),
         "allowed_intents": ["query", "clarify", "unavailable", "export", "note_edit", "field_update", "summarize", "unsupported"],
         "allowed_operations": ["filter", "aggregate", "sort", "count", "count_unique", "average", "summarize", "export", "add_note", "update_field"],
         "allowed_operators": [

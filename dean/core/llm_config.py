@@ -1,8 +1,10 @@
 """Local-LLM configuration.
 
-The local model is always optional. Strict privacy mode force-disables it.
-This module centralizes the settings and maps the app's existing settings dict
-onto the Phase G config shape so nothing else has to change.
+The local model is on by default. Strict privacy mode restricts row-level and
+hidden-field access (see full_row_access/all_matching_rows below); it does
+not disable the model itself. This module centralizes the settings and maps
+the app's existing settings dict onto the Phase G config shape so nothing
+else has to change.
 """
 
 from __future__ import annotations
@@ -31,18 +33,15 @@ def from_app_settings(settings: dict[str, Any] | None) -> dict[str, Any]:
     """Map the existing app settings dict onto the Phase G config.
 
     Backward compatible: `use_local_llm` -> `llm_enabled`, `ollama_model` ->
-    planner/explanation model. Strict privacy mode forces the model off.
+    planner/explanation model. Strict privacy mode narrows row/field access
+    below, it no longer forces the model off.
     """
     settings = settings or {}
     config = dict(DEFAULT_LLM_CONFIG)
     strict = bool(settings.get("strict_privacy_mode", False))
     enabled = bool(settings.get("llm_enabled", settings.get("use_local_llm", False)))
-    if strict:
-        enabled = False
     model = settings.get("planner_model") or settings.get("ollama_model") or config["planner_model"]
-    # The conversational narrator runs *after* validated execution. Strict
-    # privacy still force-disables it (Option A: maximum safety; deterministic
-    # narration remains).
+    # The conversational narrator runs *after* validated execution.
     conversation_enabled = bool(
         enabled and settings.get("conversation_llm_enabled", False)
     )

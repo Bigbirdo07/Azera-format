@@ -829,10 +829,11 @@ def analyze(
 
 def default_llm_call(model_name: str, timeout: int = 120) -> Callable[[str], str]:
     """Local Ollama caller in free-text (non-JSON) mode for codegen."""
-    from nlp.local_model import _call_ollama
+    from nlp.local_model import ANALYST_NUM_CTX, _call_ollama
 
     def _call(prompt: str) -> str:
-        raw, error = _call_ollama(prompt, model_name, timeout=timeout, json_mode=False)
+        raw, error = _call_ollama(prompt, model_name, timeout=timeout, json_mode=False,
+                                  num_ctx=ANALYST_NUM_CTX)
         if error or raw is None:
             raise RuntimeError(error or "no response")
         return raw

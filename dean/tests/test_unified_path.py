@@ -90,15 +90,32 @@ def test_llm_route_through_ui(chat, monkeypatch):
     assert chat.get("routing_debug")["plan_source"] == "llm"
 
 
-def test_llm_disabled_never_calls_model(chat, monkeypatch):
+def test_llm_disabled_never_calls_model(sheets, columns, monkeypatch):
+    # The local LLM is on by default (Dean now treats it as a first-class,
+    # not opt-in, capability); this verifies the "never calls the model when
+    # off" guarantee still holds for a user who explicitly turns it off.
+    # Exercised at the planner level directly -- the Streamlit AppTest harness
+    # shares process-global caches (get_ollama_manager is @st.cache_resource)
+    # across separate test sessions, which makes it an unreliable place to
+    # assert this specific invariant.
     import nlp.planner_router as router
+    from nlp.planner_router import plan_user_request
 
     def boom(config):
         raise AssertionError("LLM must not be called when disabled")
 
     monkeypatch.setattr(router, "_default_llm_call", boom)
-    chat.send("Show me Accounting students")  # confident rules path
-    assert chat.get("assistant_mode") == "ask_question"
+
+    routing = plan_user_request(
+        user_message="Show me Accounting students",
+        sheets=sheets,
+        sheet_columns={"Students": columns},
+        selected_sheet="Students",
+        conversation_state=None,
+        settings={"use_local_llm": False, "llm_enabled": False},
+    )
+    assert routing["intent"] == "query"
+    assert routing["llm_used"] is False
 
 
 def test_invalid_llm_plan_rejected_in_ui(chat, monkeypatch):

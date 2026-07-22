@@ -79,6 +79,14 @@ class BundledOllamaManager:
         if self.process and self.process.poll() is None and self.status.model_name == model_name:
             return True
 
+        # Avoid double-loading the model into RAM: if a system Ollama on the
+        # default port already has it, reuse that instead of spawning a
+        # second bundled server with its own copy of the model weights.
+        if self.port != 11434 and self._system_ollama_has_model(model_name):
+            self.port = 11434
+            self.url = "http://127.0.0.1:11434"
+            return self._check_system_ollama(model_name)
+
         self.status = LLMRuntimeStatus(
             mode="rule_only",
             endpoint=self.url,
@@ -211,6 +219,18 @@ class BundledOllamaManager:
             )
         return False
 
+    def _system_ollama_has_model(self, model_name: str) -> bool:
+        try:
+            request = urllib.request.Request("http://127.0.0.1:11434/api/tags", method="GET")
+            with urllib.request.urlopen(request, timeout=1) as response:
+                if response.status != 200:
+                    return False
+                payload = json.loads(response.read().decode("utf-8"))
+                models = [item.get("name") for item in payload.get("models", [])]
+                return model_name in models or f"{model_name}:latest" in models
+        except Exception:
+            return False
+
     def _check_system_ollama(self, model_name: str) -> bool:
         try:
             request = urllib.request.Request(f"{self.url}/api/tags", method="GET")
@@ -246,7 +266,7 @@ class BundledOllamaManager:
 
     def update_state(self, settings: dict[str, Any], debug_mode: bool = False):
         strict = settings.get("strict_privacy_mode", True)
-        enabled = settings.get("use_local_llm", False) and not strict
+        enabled = settings.get("use_local_llm", False)
         model_name = settings.get("ollama_model", "llama3.2:3b")
 
         if enabled:

@@ -47,7 +47,7 @@ more of it. Every item is additive (no-op until it has data; nothing removed).
 
 | Limitation | Efficient fix | State |
 |---|---|---|
-| Analyst can silently generate wrong pandas | Route MORE ops to the deterministic dispatcher; shrink the LLM-codegen surface | not yet |
+| Analyst can silently generate wrong pandas | Route MORE ops to the deterministic dispatcher; shrink the LLM-codegen surface | ✅ `_ANALYST_GENERIC_OPS` emptied (2026-07-22) — count/sum/average/filter-type ops joined groupby on the deterministic path; the analyst route is now unreachable via structured ops (it was already unreachable in the live app — no `code_analyst_enabled` UI toggle exists) |
 | Small-model planning errors on novel phrasings | Dynamic few-shot retrieval + learned-synonyms loop | loop ✅ |
 | Feels frozen; silent fallback | `num_predict` cap + startup warm + explicit `keep_alive` | ✅ (see below) |
 | New rosters with different headers break | Lean on column-mapping layer + populate `learned_column_mappings` | wired ✅ |

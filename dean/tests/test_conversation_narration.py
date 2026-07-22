@@ -94,14 +94,18 @@ def test_routing_narration_describes_followup(sheets, columns):
 # ---- llm_config strict-privacy gating --------------------------------------
 
 
-def test_strict_privacy_forces_conversation_llm_off():
+def test_strict_privacy_restricts_row_access_not_the_model():
     config = from_app_settings({
         "use_local_llm": True,
         "conversation_llm_enabled": True,
+        "planner_full_row_access": True,
+        "local_llm_full_row_access": True,
         "strict_privacy_mode": True,
     })
-    assert config["llm_enabled"] is False
-    assert config["conversation_llm_enabled"] is False
+    assert config["llm_enabled"] is True
+    assert config["conversation_llm_enabled"] is True
+    assert config["planner_full_row_access"] is False
+    assert config["local_llm_full_row_access"] is False
 
 
 def test_conversation_llm_requires_llm_enabled():
@@ -272,12 +276,12 @@ def test_dispatcher_falls_back_to_deterministic_message_when_llm_disabled(sheets
     assert response["message"].startswith("I understood this as")
 
 
-def test_dispatcher_strict_privacy_skips_conversation_llm(sheets, columns, monkeypatch):
+def test_dispatcher_strict_privacy_still_converses_without_row_access(sheets, columns, monkeypatch):
     called = {"n": 0}
 
     def fake_converse(**kwargs):
         called["n"] += 1
-        return "Should not be called.", None
+        return "Conversational reply.", None
 
     import nlp.local_model as lm
     monkeypatch.setattr(lm, "converse_about_result_with_model", fake_converse)
@@ -286,11 +290,12 @@ def test_dispatcher_strict_privacy_skips_conversation_llm(sheets, columns, monke
     response = execute_planned_request(routing, _Loaded(sheets), settings={
         "use_local_llm": True,
         "conversation_llm_enabled": True,
+        "local_llm_full_row_access": True,
         "strict_privacy_mode": True,
     }, request_summary="Show me Accounting students")
 
-    assert called["n"] == 0
-    assert response["conversation_llm_used"] is False
+    assert called["n"] == 1
+    assert response["conversation_llm_used"] is True
 
 
 # ---- narrator rejects meta/JSON descriptions -------------------------------

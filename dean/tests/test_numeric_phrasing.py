@@ -103,3 +103,38 @@ def test_natural_phrasings_resolve_to_numeric_filter(query, expected, columns, s
 def test_natural_phrasings_round_trip_through_detect_filters(columns, synonyms):
     filters = _detect_filters("how many students above a 2 gpa", columns, synonyms)
     assert filters == [{"column": "GPA", "operator": "greater_than", "value": 2}]
+
+
+@pytest.mark.parametrize(
+    "query,expected",
+    [
+        # _detect_filters splits on bare "and"/"or" to parse multi-clause
+        # asks ("gpa below 2.0 and attendance below 90"). That split must NOT
+        # fire on the "or"/"and" that's part of a comparison phrase itself
+        # ("or higher", "and up", ...), or the threshold gets torn away from
+        # its number and silently dropped instead of parsed.
+        ("how many students have a gpa of 3.5 or higher",
+         [{"column": "GPA", "operator": "greater_or_equal", "value": 3.5}]),
+        ("students with a 2 gpa or above",
+         [{"column": "GPA", "operator": "greater_or_equal", "value": 2}]),
+        ("students with a 2.5 gpa or below",
+         [{"column": "GPA", "operator": "less_or_equal", "value": 2.5}]),
+        ("students with a 2 gpa and up",
+         [{"column": "GPA", "operator": "greater_or_equal", "value": 2}]),
+        ("gpa of 2 or more",
+         [{"column": "GPA", "operator": "greater_or_equal", "value": 2}]),
+    ],
+)
+def test_or_and_comparison_phrases_survive_clause_splitting(query, expected, columns, synonyms):
+    filters = _detect_filters(query, columns, synonyms, original_text=query)
+    assert filters == expected, f"expected {expected}, got {filters}"
+
+
+def test_genuine_and_clause_still_splits_into_two_filters(columns, synonyms):
+    query = "students with gpa below 2.0 and attendance below 90"
+    columns_with_attendance = columns + ["Attendance Rate"]
+    filters = _detect_filters(query, columns_with_attendance, synonyms, original_text=query)
+    assert filters == [
+        {"column": "GPA", "operator": "less_than", "value": 2.0},
+        {"column": "Attendance Rate", "operator": "less_than", "value": 0.9},
+    ]

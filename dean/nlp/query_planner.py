@@ -56,6 +56,18 @@ _COMPARISON_WORDS = {
     "less_or_equal": ["at most", "or less", "or lower", "or below", "or fewer", "and down", "and below", "up to"],
 }
 
+# Second word of every two-word "and X"/"or X" comparison phrase above ("or
+# higher", "and up", ...). The AND/OR clause-splitter below must not treat
+# these as clause connectors, or "GPA of 3.5 or higher" gets torn into "...
+# 3.5" and "higher" -- neither half contains the full comparison, so the
+# threshold is silently dropped instead of parsed.
+_AND_OR_COMPARISON_CONTINUATIONS = frozenset(
+    phrase.split(" ", 1)[1]
+    for words in _COMPARISON_WORDS.values()
+    for phrase in words
+    if phrase.startswith(("and ", "or "))
+)
+
 # Symbolic comparisons ("gpa >= 2", "gpa < 3") map to operators directly.
 # Order matters: two-character ops come first so ">=" doesn't get caught by ">".
 _SYMBOL_COMPARISONS: tuple[tuple[str, str], ...] = (
@@ -941,7 +953,8 @@ def _detect_filters(text: str, columns: list[str], synonyms: dict[str, Any],
     if " between " in f" {text} ":
         chunks = [text]
     else:
-        chunks = re.split(r"\s+(?:and|or|;)\s+", text)
+        continuations = "|".join(re.escape(w) for w in _AND_OR_COMPARISON_CONTINUATIONS)
+        chunks = re.split(rf"\s+(?:and|or|;)(?!\s+(?:{continuations}))\s+", text)
     for chunk in chunks:
         chunk_filter = _numeric_filter(chunk, columns, synonyms)
         if chunk_filter and chunk_filter["column"] not in seen_numeric_cols:

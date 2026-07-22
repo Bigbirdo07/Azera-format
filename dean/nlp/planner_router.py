@@ -27,6 +27,7 @@ from nlp.conversation import (
     describe_filters,
     has_hard_edit_cue,
     is_additive,
+    unsupported_action_reason,
 )
 from nlp.model_prompt import build_repair_prompt, build_safe_planner_prompt, build_validation_repair_prompt
 from nlp.narration import narrate_plan
@@ -196,22 +197,41 @@ def plan_user_request(
     # 2. Deterministic query planner.
     rule = plan_query(user_request=user_message, selected_sheet=selected_sheet,
                       sheet_columns=sheet_columns, frame=frame)
+    clarification_hint = None
     if (
         rule.needs_clarification
         and rule.confidence >= HIGH_CONFIDENCE
     ):
-        result = _result(
-            plan_source="clarification",
-            intent="clarify",
-            confidence=rule.confidence,
-            plan=None,
-            llm_used=False,
-            confirmation_reason=rule.clarification_question,
-            fallback_reason=None,
-            band="low",
-        )
-        result["clarify_options"] = list(getattr(rule, "clarification_options", []) or [])
-        return result
+        if not config["llm_enabled"] or _is_hard_data_limitation(rule.clarification_question):
+            # Either the model is off, or this isn't ambiguity the model could
+            # resolve -- the workbook genuinely lacks the concept/column asked
+            # about. Letting the model "decide" here risks it hallucinating a
+            # plausible-looking plan against the wrong column instead of
+            # correctly reporting the data doesn't exist. Stays a hard,
+            # deterministic guardrail like ranking/groupby.
+            result = _result(
+                plan_source="clarification",
+                intent="clarify",
+                confidence=rule.confidence,
+                plan=None,
+                llm_used=False,
+                confirmation_reason=rule.clarification_question,
+                fallback_reason=None,
+                band="low",
+            )
+            result["clarify_options"] = list(getattr(rule, "clarification_options", []) or [])
+            return result
+        # LLM enabled and this is genuine ambiguity (not a missing-data
+        # limitation): a high-confidence-but-incomplete deterministic parse no
+        # longer short-circuits straight to a clarify prompt. Hand it to the
+        # model as context instead -- it may resolve the ambiguity using
+        # conversation state the rules engine doesn't see, or it may itself
+        # decide to ask (intent="clarify" is still a normal LLM outcome,
+        # handled in _route_llm_first).
+        clarification_hint = {
+            "question": rule.clarification_question,
+            "options": list(getattr(rule, "clarification_options", []) or []),
+        }
     rule_usable = not rule.needs_clarification and bool(rule.query.get("operation"))
     grounded = rule_usable and _is_grounded(rule.query, user_message)
     # A follow-up that refines an existing selection ("just the top 5",
@@ -275,7 +295,7 @@ def plan_user_request(
         return _route_llm_first(
             user_message, sheet_columns, selected_sheet, sheets, state, config,
             llm_call, rule=rule, rule_usable=rule_usable, grounded=grounded,
-            columns=columns,
+            columns=columns, clarification_hint=clarification_hint,
         )
 
     # 4. Model disabled (strict privacy / offline) -> deterministic rules.
@@ -295,6 +315,20 @@ def plan_user_request(
 
 
 def _classify_action_intent(message, columns, state, sheet, frame=None) -> dict[str, Any] | None:
+    # Checked first, before anything else gets a chance to reinterpret the
+    # message as a read question: "delete all freshmen" was silently
+    # answered as "how many freshmen" (query_planner's operation-detection
+    # catch-all never inspects for "delete"), and "email every at-risk
+    # student..." was answered as a filtered preview. Dean has no row-delete-
+    # by-filter capability (the only real delete action is
+    # remove_duplicates) and no communication-sending capability at all, so
+    # the correct behavior is to decline and explain, not to execute or plan
+    # anything.
+    decline_reason = unsupported_action_reason(message)
+    if decline_reason:
+        return _result(plan_source="rules", intent="unsupported", confidence=1.0,
+                       plan=None, llm_used=False, confirmation_reason=decline_reason)
+
     active = list(state.get("active_filters", []))
     # Bulk watch/note actions apply to the active filter context from a prior
     # turn ("show GPA below 2.0" then "mark these as watch"). A natural
@@ -951,15 +985,29 @@ def _parse_with_repair(raw, call, config) -> dict[str, Any] | None:
     return _parse_plan_text(repaired)
 
 
-def _llm_plan(message, sheet_columns, selected_sheet, sheets, state, config, llm_call):
+def _llm_plan(message, sheet_columns, selected_sheet, sheets, state, config, llm_call,
+              clarification_hint: dict[str, Any] | None = None):
     columns = sheet_columns.get(selected_sheet, [])
     frame = sheets.get(selected_sheet)
+    active_filters = state.get("active_filters", [])
+    # The deterministic merge in _build_query_routing has final say over
+    # filters regardless of what the model plans (compose_filters always
+    # runs). This is read-only context so the model's OWN plan is more
+    # likely to already agree with that merge, instead of planning as if
+    # every turn were a fresh question.
+    conversation_hint = {
+        "turn_type": classify_context_action(message),
+        "additive": is_additive(message),
+        "active_filters_description": describe_filters(active_filters),
+    }
     prompt = build_safe_planner_prompt(
         user_request=message, sheet_names=list(sheet_columns), sheet_columns=sheet_columns,
-        active_filters=state.get("active_filters", []),
+        active_filters=active_filters,
         canonical_map=canonical_map(columns) if columns else {},
         safe_values=_safe_categorical_values(frame) if frame is not None else {},
         row_context=_planner_row_context(sheets) if config.get("planner_full_row_access") else None,
+        clarification_hint=clarification_hint,
+        conversation_hint=conversation_hint,
     )
     call = llm_call or _default_llm_call(config)
     return _parse_with_repair(call(prompt), call, config)
@@ -1007,6 +1055,20 @@ def _is_ranking_query(message: str) -> bool:
     return bool(_RANKING_CUE_RE.search(normalize_text(message or "")))
 
 
+# Phrasing query_planner.py uses consistently for "this concept/column simply
+# isn't in the workbook" clarifications -- a fact, not an ambiguity the model
+# could reason its way out of.
+_HARD_DATA_LIMITATION_MARKERS = (
+    "does not include",
+    "only has a single current snapshot",
+)
+
+
+def _is_hard_data_limitation(clarification_question: str | None) -> bool:
+    text = (clarification_question or "").lower()
+    return any(marker in text for marker in _HARD_DATA_LIMITATION_MARKERS)
+
+
 def _route_llm_first(
     user_message: str,
     sheet_columns: dict[str, list[str]],
@@ -1020,6 +1082,7 @@ def _route_llm_first(
     rule_usable: bool,
     grounded: bool,
     columns: list[str],
+    clarification_hint: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """LLM is the primary planner; the rules plan is the deterministic guardrail.
 
@@ -1038,7 +1101,8 @@ def _route_llm_first(
                                     selected_sheet, band=rule_band)
 
     try:
-        plan = _llm_plan(user_message, sheet_columns, selected_sheet, sheets, state, config, llm_call)
+        plan = _llm_plan(user_message, sheet_columns, selected_sheet, sheets, state, config, llm_call,
+                         clarification_hint=clarification_hint)
     except OllamaUnavailable as exc:
         return _fallback(rule, f"local model unavailable ({exc})", grounded, state,
                          user_message, columns, selected_sheet)

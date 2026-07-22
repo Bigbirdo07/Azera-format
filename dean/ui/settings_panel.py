@@ -17,7 +17,7 @@ from core.privacy_guard import local_only_security_summary
 SETTINGS_PATH = Path(__file__).resolve().parents[1] / "config" / "settings.json"
 DEFAULT_SETTINGS = {
     "strict_privacy_mode": True,
-    "use_local_llm": False,
+    "use_local_llm": True,
     "ollama_model": "llama3.2:3b",
     "llm_explanations_enabled": False,
     "conversation_llm_enabled": False,
@@ -136,12 +136,16 @@ def render_settings_panel() -> dict[str, Any]:
         strict_privacy_mode = st.checkbox(
             "Maximum privacy mode",
             value=bool(settings.get("strict_privacy_mode", True)),
-            help="Forces local model fallback off. This is recommended for sensitive student data.",
+            help="Restricts the local model to schema/summary-level access only — no "
+            "full workbook rows or hidden fields. The local model itself stays on. "
+            "Recommended for sensitive student data.",
         )
         if strict_privacy_mode != bool(settings.get("strict_privacy_mode", True)):
             settings = {**settings, "strict_privacy_mode": strict_privacy_mode}
             if strict_privacy_mode:
-                settings["use_local_llm"] = False
+                settings["planner_full_row_access"] = False
+                settings["local_llm_full_row_access"] = False
+                settings["local_llm_all_matching_rows"] = False
             save_settings(settings)
 
         # Interaction logging is independent of LLM availability. The log is
@@ -165,26 +169,22 @@ def render_settings_panel() -> dict[str, Any]:
             )
             save_risk_settings(st.session_state, risk_settings)
 
-        if settings.get("strict_privacy_mode", True):
-            if (
-                settings.get("use_local_llm")
-                or settings.get("conversation_llm_enabled")
-                or settings.get("planner_full_row_access")
-                or settings.get("local_llm_full_row_access")
-                or settings.get("local_llm_all_matching_rows")
-            ):
-                settings = {
-                    **settings,
-                    "use_local_llm": False,
-                    "conversation_llm_enabled": False,
-                    "planner_full_row_access": False,
-                    "local_llm_full_row_access": False,
-                    "local_llm_all_matching_rows": False,
-                }
-                save_settings(settings)
-            st.success("Maximum privacy mode is on. Local model fallback is disabled. "
-                       "Deterministic narration, suggestions, and sanitized logging remain available.")
-            return settings
+        strict = bool(settings.get("strict_privacy_mode", True))
+        if strict and (
+            settings.get("planner_full_row_access")
+            or settings.get("local_llm_full_row_access")
+            or settings.get("local_llm_all_matching_rows")
+        ):
+            settings = {
+                **settings,
+                "planner_full_row_access": False,
+                "local_llm_full_row_access": False,
+                "local_llm_all_matching_rows": False,
+            }
+            save_settings(settings)
+        if strict:
+            st.caption("Maximum privacy mode is on: the local model can plan, explain, and "
+                       "converse, but never receives full workbook rows or hidden fields.")
 
         show_advanced_llm = st.checkbox(
             "Show optional local model setup",
@@ -238,25 +238,27 @@ def render_settings_panel() -> dict[str, Any]:
         )
         planner_full_rows = st.checkbox(
             "Give planner LLM workbook rows",
-            value=bool(settings.get("planner_full_row_access", False)) and use_local_llm,
-            disabled=not use_local_llm,
+            value=bool(settings.get("planner_full_row_access", False)) and use_local_llm and not strict,
+            disabled=not use_local_llm or strict,
             help="When on, the local Ollama planner receives workbook rows, not just schema. "
-            "Plans are still validated before pandas executes them.",
+            "Plans are still validated before pandas executes them. Disabled under maximum "
+            "privacy mode.",
         )
         full_row_access = st.checkbox(
             "Give local LLM full matching-row samples",
-            value=bool(settings.get("local_llm_full_row_access", False)) and use_local_llm and conversation_llm,
-            disabled=not (use_local_llm and conversation_llm),
+            value=bool(settings.get("local_llm_full_row_access", False)) and use_local_llm and conversation_llm and not strict,
+            disabled=not (use_local_llm and conversation_llm) or strict,
             help="When on, the local Ollama narrator can see a bounded sample of matching rows, "
             "including names and hidden columns, so it can reason over concrete students. "
-            "The connection is still restricted to localhost.",
+            "The connection is still restricted to localhost. Disabled under maximum privacy mode.",
         )
         all_matching_rows = st.checkbox(
             "Send all matching rows to conversational LLM",
-            value=bool(settings.get("local_llm_all_matching_rows", False)) and use_local_llm and conversation_llm and full_row_access,
-            disabled=not (use_local_llm and conversation_llm and full_row_access),
+            value=bool(settings.get("local_llm_all_matching_rows", False)) and use_local_llm and conversation_llm and full_row_access and not strict,
+            disabled=not (use_local_llm and conversation_llm and full_row_access) or strict,
             help="When on, the local narrator receives all matched rows instead of the "
-            "default bounded sample. This stays local, but large result sets can slow the model.",
+            "default bounded sample. This stays local, but large result sets can slow the model. "
+            "Disabled under maximum privacy mode.",
         )
         next_settings = {
             "strict_privacy_mode": bool(settings.get("strict_privacy_mode", False)),

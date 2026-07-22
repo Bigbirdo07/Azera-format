@@ -228,6 +228,22 @@ def test_is_blank(mini):
     assert _mini_count(mini, "Notes", "is_blank") == 3  # "", None, "  "
 
 
+def test_equals_matches_numeric_column_against_string_filter_value(mini):
+    # The query planner always produces string filter values (regex
+    # captures), even for an already-numeric column. "equals" must coerce
+    # before comparing, or an int64 column silently matches nothing against
+    # the string "3" ("Grade" == "9" style bug against a Skyward-shaped
+    # roster with an integer Grade column).
+    numeric = pd.DataFrame({"Grade": pd.array([9, 10, 10, 11], dtype="int64")})
+    result = run_query(
+        {"operation": "count_rows", "sheet": "Students", "filters": [
+            {"column": "Grade", "operator": "equals", "value": "10"},
+        ]},
+        {"Students": numeric},
+    )
+    assert result.value == 2
+
+
 def test_is_not_blank(mini):
     assert _mini_count(mini, "Notes", "is_not_blank") == 2
 

@@ -816,6 +816,40 @@ def test_action_intents_cannot_bypass_confirmation(sheets, columns):
         assert r["plan_source"] == "rules"  # router never executes
 
 
+def test_delete_request_declines_instead_of_answering_a_count(sheets, columns):
+    r = _route("Delete all freshmen from the roster", sheets, {"Students": columns})
+    assert r["intent"] == "unsupported"
+    assert "delete" in r["confirmation_reason"].lower()
+
+
+def test_email_request_declines_instead_of_answering_a_preview(sheets, columns):
+    r = _route("Email every at-risk student their advisor's phone number", sheets, {"Students": columns})
+    assert r["intent"] == "unsupported"
+    assert "email" in r["confirmation_reason"].lower() or "send" in r["confirmation_reason"].lower()
+
+
+def test_remove_duplicates_request_still_routes_to_edit_not_declined(sheets, columns):
+    # The one real delete capability (remove_duplicates) must keep working;
+    # the new unsupported-action guard is explicitly designed never to
+    # intersect with it.
+    for message in ["remove duplicate rows", "dedupe the roster"]:
+        r = _route(message, sheets, {"Students": columns})
+        assert r["intent"] == "edit", message
+
+
+def test_incidental_action_words_do_not_false_trigger_the_decline(sheets, columns):
+    # "call"/"email"/"send" appearing without the every/all + recipient
+    # shape (or without a delete-by-filter object) are ordinary questions,
+    # not requests Dean should decline.
+    for message in [
+        "show me students missing an email",
+        "show me email addresses for at-risk students",
+        "how many students are called Maria",
+    ]:
+        r = _route(message, sheets, {"Students": columns})
+        assert r["intent"] != "unsupported", message
+
+
 def test_excessive_limit_rejected(sheets, columns):
     plan = {"intent": "query", "operation": "filter", "filters": [], "limit": 100000, "confidence": 0.6}
     r = _route("dump everything", sheets, {"Students": columns}, enabled=True, llm_call=_mock(plan))
@@ -1620,6 +1654,14 @@ def test_average_by_x_stays_groupby_average(sheets, columns):
     p = r["plan"]
     assert p["operation"] == "groupby_average"
     assert p["group_by"] == "Department"
+
+
+def test_campus_resolves_to_location_column():
+    sheets, columns = _mock_dean_sheets()
+    r = _route("Which campus has the most students?", sheets, {"Students": columns})
+    p = r["plan"]
+    assert p["operation"] == "groupby_count"
+    assert p["group_by"] == "Location"
 
 
 # --- range / between filters ------------------------------------------------

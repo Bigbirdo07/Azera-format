@@ -120,16 +120,15 @@ def friendly_validation_error(exc_message: Any, columns: list[str], sheets: list
 # trend_summary, advisor_outcome_summary, data_quality_summary, …) is a
 # purpose-built specialist and stays on the deterministic dispatcher. Allowlist,
 # not denylist, so new specialized operations default to the deterministic path.
-# Generic reads we let the (opt-in) LLM analyst answer. Deliberately EXCLUDES the
-# groupby/ranking ops: the deterministic query engine (core.query_engine.run_query)
-# computes "which group has the highest/lowest <agg>" exactly via idxmax/idxmin and
-# names the winner, whereas llama3.2:3b reliably mis-ranks or blanks on these
-# (dean_eval.py groupby category: 3/7 on the LLM vs 7/7 deterministic). Ranking is
-# structured, not open-ended, so the tested engine wins — see docs/llm_improvement_log.md.
-_ANALYST_GENERIC_OPS = frozenset({
-    "filtered_preview", "count_rows", "count_unique", "list_unique",
-    "average_column", "sum_column", "min_column", "max_column",
-})
+# Empty by design (docs/llm_improvement_log.md, Part 2: "Route MORE ops to the
+# deterministic dispatcher; shrink the LLM-codegen surface"). Groupby/ranking
+# moved off this allowlist first (llama3.2:3b mis-ranked 3/7 vs the
+# deterministic engine's 7/7 in dean_eval.py); count/sum/average/filter-type
+# ops followed the same reasoning — core.execution_dispatcher already computes
+# these exactly via pandas and phrases them conversationally via
+# converse_about_result_with_model, so the free-form code-analyst loop adds
+# LLM-codegen risk without adding capability for anything structured like this.
+_ANALYST_GENERIC_OPS = frozenset()
 
 
 def route_message(
@@ -1300,8 +1299,6 @@ def _rules_fallback_note(routing: dict, settings: dict[str, Any]) -> str | None:
     when there's nothing to say. Developer-flavoured detail belongs in the
     Developer Tools toggle, not here."""
     if not settings.get("use_local_llm"):
-        return None
-    if settings.get("strict_privacy_mode", True):
         return None
     plan_source = (routing.get("plan_source") or "").lower()
     if plan_source in {"llm", "local_llm"}:

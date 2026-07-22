@@ -22,6 +22,7 @@ from nlp.model_prompt import (
     build_query_planner_prompt,
 )
 from nlp.privacy_filter import check_local_model_request_privacy
+from nlp.system_resources import ollama_call_is_safe
 from core.privacy_guard import PrivacyGuardError, assert_loopback_url
 
 
@@ -413,6 +414,15 @@ SHORT_NUM_CTX = 2048
 explanation). Keeping these calls small frees ~500 MB of KV cache per call
 on Apple Silicon when the model is loaded with default keep_alive=5m."""
 
+ANALYST_NUM_CTX = 4096
+"""Context window for the code-analyst loop (nlp/code_analyst.py). Its system
+prompt (schema + sample rows + hints) measures ~1,000 tokens on the real
+roster; multi-step iterations (up to MAX_ITERATIONS) and 3-turn history can
+add another ~2,000-2,500 in a worst-case turn. 4096 keeps comfortable
+headroom against truncation while still cutting KV-cache memory roughly in
+half versus the 8192 default the analyst previously inherited unintentionally
+(it never set num_ctx explicitly)."""
+
 PLANNER_NUM_PREDICT = 1024
 """Hard ceiling on tokens the model may generate for a planner/code reply.
 Without a cap, a small model that starts repeating itself will stream until the
@@ -445,6 +455,10 @@ def _call_ollama(
     }
     if json_mode:
         payload["format"] = "json"
+
+    safe, reason = ollama_call_is_safe()
+    if not safe:
+        return None, f"Skipped local model call: {reason} (using rule parser)."
 
     if not _OLLAMA_INFLIGHT_LOCK.acquire(blocking=False):
         return None, "Local Ollama is already busy with another request; using the rule parser."

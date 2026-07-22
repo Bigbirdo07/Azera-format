@@ -28,11 +28,11 @@ from nlp.planner_router import plan_user_request
 from nlp.code_analyst import analyze, default_llm_call
 from ui.figures_panel import is_chart_request, detect_chart_intent
 
-# Mirror ui/chat_panel._ANALYST_GENERIC_OPS: groupby/ranking is intentionally
-# excluded so it routes to the deterministic engine (the LLM mis-ranks it).
-GENERIC_OPS = {"filtered_preview", "count_rows", "count_unique", "list_unique",
-               "average_column", "sum_column", "min_column", "max_column", "average",
-               "aggregate", "filter"}
+# Mirror ui/chat_panel._ANALYST_GENERIC_OPS: empty by design (see that
+# comment / docs/llm_improvement_log.md Part 2) -- every op the deterministic
+# dispatcher already computes exactly routes there instead of the free-form
+# analyst, so eval routing matches what the live app actually does.
+GENERIC_OPS = set()
 
 ROUTING_ONLY = os.environ.get("DEAN_EVAL_ROUTING_ONLY") == "1"
 ONLY_CATS = {c.strip() for c in os.environ.get("DEAN_EVAL_CATEGORIES", "").split(",") if c.strip()}
@@ -104,7 +104,10 @@ QS: list[tuple[str, str, str]] = [
         C((df["Discipline"] == "Health Sciences") & (df["Risk Level"] == "High Risk"))),
     ("compound", "How many online students are seniors?",
         C((df["Location"] == "Online") & (df["Year"] == "Senior"))),
-    ("compound", "How many students have a GPA between 2.0 and 3.0?", C((g >= 2.0) & (g < 3.0))),
+    # "between" is inclusive on both ends, matching SQL's BETWEEN and the
+    # app's own core.query_engine "between" operator -- a GPA of exactly
+    # 3.0 counts.
+    ("compound", "How many students have a GPA between 2.0 and 3.0?", C((g >= 2.0) & (g <= 3.0))),
 
     # --- distinct counts -------------------------------------------------
     ("distinct", "How many different majors are there?", str(int(df["Major"].nunique()))),
