@@ -47,6 +47,7 @@ st.file_uploader = lambda *args, **kwargs: FakeUpload(FIXTURE)
 def _isolate_outputs(tmp_path, monkeypatch):
     """Keep confirmed-action outputs and the audit log in a temp dir per test."""
     from core import confirmed_actions as ca
+    from core import failure_log as fl
     from core import interaction_logger as il
     from core import session_workbook as sw
 
@@ -62,6 +63,12 @@ def _isolate_outputs(tmp_path, monkeypatch):
     # Route those writes to tmp_path so the project's logs/ stays clean and
     # the real interaction log isn't polluted with synthetic test phrasings.
     monkeypatch.setattr(il, "DEFAULT_LOG_PATH", tmp_path / "logs" / "interaction_learning.jsonl")
+    # Same again for failure_log.log_failure (the "Things I couldn't answer"
+    # triage queue) -- previously unpatched, so every test run that exercises
+    # a clarify/unsupported/failed path permanently wrote fixture strings
+    # ("do something impossible", "something vague", ...) into the real
+    # logs/failed_asks.jsonl, drowning out genuine user-reported gaps.
+    monkeypatch.setattr(fl, "DEFAULT_PATH", tmp_path / "logs" / "failed_asks.jsonl")
     yield
 
 
