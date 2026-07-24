@@ -292,3 +292,51 @@ against the *exact original unmodified session* before being called done —
 several of these (1b, and the `"that's"` regression inside fix #2) were only
 caught because "did it actually work in the live session" was checked rather
 than trusting the isolated fix.
+
+## 2026-07-24 — Product pivot: college → K-12 (Skyward)
+
+Dean was originally built for college deans/advisors. The product direction
+is now K-12 (elementary/middle/high school), targeting Skyward specifically.
+`knowledge/skyward_field_map.json` and `scripts/make_skyward_workbook.py`
+(built earlier this session, from a real Skyward Teacher Guide PDF) are the
+reference for what the target actually looks like — not the original mock
+rosters, which are college-shaped throughout.
+
+**Trimmed today** (zero test dependency, confirmed by audit before touching):
+`credits_completed`/`credits_attempted`/`financial_aid_status` in
+`core/schema.py`'s `CANONICAL_FIELDS`, `fafsa_status` in
+`knowledge/synonyms.json`, and ~12 college-only questions in
+`scripts/dean_eval.py` (Discipline-as-academic-field, Major, Second Major) —
+all commented out, not deleted, so they're reversible if the product ever
+serves colleges again. Full suite and eval re-verified green after (43/43).
+
+**Deliberately left alone** — real test coupling or still genuinely useful,
+not actively harmful just because they're college-flavored:
+- `major`/`program` (65 references across 12 test files, all riding on
+  `scripts/make_synthetic_workbook.py`'s college-shaped fixture roster,
+  itself depended on by 38 of 46 test files). Inert for K-12 use, not
+  harmful — left in place rather than risk a large test-suite break for no
+  functional gain.
+- `housing_status` — directly asserted by
+  `tests/test_promote_learned_patterns.py`; also has a real K-12 reading
+  (boarding schools, transportation).
+- `balance_due` — has test coupling and a legitimate K-12 reading (school
+  fees, lunch balances) once reworded from "tuition."
+- `department`/`discipline` — not purely college-flavored; middle/high
+  schools genuinely organize by subject-area department.
+
+**Explicitly deferred, not started:**
+1. **Per-class/course-level modeling.** Confirmed via audit: no course,
+   section, or schedule *entity* exists anywhere in the codebase today —
+   only column-name-level recognition that a sheet might have a "course"
+   column (`core/attendance.py`, `nlp/query_planner.py`,
+   `nlp/dynamic_suggestions.py`). This is genuinely greenfield work, not
+   something to strip college logic out of. Needs real school course/schedule
+   data to design against correctly — deferred until there's a client to
+   source that from, per the user's own framing.
+2. **Replacing the default test fixtures with a K-12-shaped roster.** The
+   honest, complete fix for "college logic hurting the K-12 focus" is making
+   `scripts/make_skyward_workbook.py`'s shape the *default* test fixture
+   instead of `make_synthetic_workbook.py`'s college roster — but that's a
+   38+ file migration, explicitly out of scope for a single session. Today's
+   trim only removed the zero-risk, zero-value dead weight.

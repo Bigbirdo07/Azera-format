@@ -206,7 +206,13 @@ def _rule_plan(user_request: str, sheet: str, columns: list[str], frame=None) ->
         if major_filter and major_filter["column"] not in already:
             filters.append(major_filter)
             already.add(major_filter["column"])
-        for condition in detect_value_filters(user_request, frame):
+        # "Risk Reason" (core.combined_risk) is a derived, machine-generated
+        # compound explanation string ("GPA below 2.0; Attendance below
+        # 90%"), not a real categorical filter dimension -- its own values
+        # can exact-match a user's natural GPA/attendance phrasing ("GPA
+        # below 2.0") and silently add a spurious, overly-narrow filter that
+        # excludes students whose reason string also mentions something else.
+        for condition in detect_value_filters(user_request, frame, skip_columns={"Risk Reason"}):
             if _is_assessment_term_value_filter(text, condition):
                 continue
             if condition["column"] not in already:
@@ -1478,7 +1484,7 @@ def _is_assessment_term_value_filter(text: str, condition: dict[str, Any]) -> bo
     if not any(token in text for token in ("sat", "psat", "benchmark", "assessment")):
         return False
     value = normalize_text(str(condition.get("value") or ""))
-    return value in {"math", "reading", "verbal", "ebrw", "benchmark", "sat", "psat"}
+    return value in {"math", "reading", "verbal", "ebrw", "benchmark", "sat", "psat", "english", "writing"}
 
 
 def _assessment_benchmark_filter(
@@ -1693,7 +1699,27 @@ def _notes_filter(text: str, columns: list[str], *, original_text: str) -> dict[
     return None
 
 
+_SMALL_NUMBER_WORDS = {
+    "zero": "0", "one": "1", "two": "2", "three": "3", "four": "4", "five": "5",
+    "six": "6", "seven": "7", "eight": "8", "nine": "9", "ten": "10",
+}
+_SMALL_NUMBER_WORD_RE = re.compile(
+    r"\b(" + "|".join(_SMALL_NUMBER_WORDS) + r")\b"
+)
+
+
+def _spell_out_small_numbers(text: str) -> str:
+    """"more than one risk signal" -> "more than 1 risk signal". The numeric
+    regexes below only match digits, so a spelled-out small number (common in
+    natural phrasing -- "at least two", "more than one") silently produced no
+    filter at all rather than a wrong one. Scoped to this function only, not
+    global normalize_text, since digit substitution elsewhere in the app
+    (notes search, free text) could have unintended effects."""
+    return _SMALL_NUMBER_WORD_RE.sub(lambda m: _SMALL_NUMBER_WORDS[m.group(1)], text)
+
+
 def _numeric_filter(text: str, columns: list[str], synonyms: dict[str, Any]) -> dict[str, Any] | None:
+    text = _spell_out_small_numbers(text)
     # 0. Range / between: "between 2.0 and 2.5", "from 30 to 60", "30 to 60
     # credits", "gpa 2.0-2.5". Tried first so a two-number range wins over
     # the single-comparison patterns below.

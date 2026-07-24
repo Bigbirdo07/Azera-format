@@ -84,15 +84,23 @@ QS: list[tuple[str, str, str]] = [
     ("count", "How many seniors are there?", C(df["Year"] == "Senior")),
     ("count", "How many freshmen are there?", C(df["Year"] == "Freshman")),
     ("count", "How many students study online?", C(df["Location"] == "Online")),
-    # NOTE: "Nursing" is both a Discipline and a Major, so a bare "in Nursing" is
-    # genuinely ambiguous — the app correctly asks which. Use a discipline-only
-    # value (Health Sciences) to test the count path cleanly.
-    ("count", "How many students are in the Health Sciences discipline?", C(df["Discipline"] == "Health Sciences")),
-    ("count", "How many students are in Engineering?", C(df["Discipline"] == "Engineering")),
+    # Discipline-as-academic-field and Major/Second-Major questions below are
+    # commented out (not deleted) during the K-12/Skyward pivot: they test a
+    # higher-ed concept (field of study) that has no real Skyward equivalent.
+    # ("count", "How many students are in the Health Sciences discipline?", C(df["Discipline"] == "Health Sciences")),
+    # ("count", "How many students are in Engineering?", C(df["Discipline"] == "Engineering")),
     ("count", "How many students have a GPA below 2.0?", C(g < 2.0)),
     ("count", "How many students have a GPA of 3.5 or higher?", C(g >= 3.5)),
     ("count", "How many students have an SAT Total of 1400 or higher?", C(df["SAT Total"] >= 1400)),
-    ("count", "How many students have a second major?", C(df["Second Major"].notna())),
+    # ("count", "How many students have a second major?", C(df["Second Major"].notna())),
+    # SAT/PSAT English were never exercised before -- only Total/Math were.
+    ("count", "How many students scored above 650 on SAT English?", C(df["SAT English"] > 650)),
+    # Raw attendance counts (Days Absent), not just the derived Attendance
+    # Rate/Category -- never exercised before.
+    ("count", "How many students have missed more than 15 days?", C(df["Days Absent"] > 15)),
+    # Risk Signals (a derived count column) as its own numeric threshold,
+    # not just the Risk Level label built from it.
+    ("count", "How many students have more than one risk signal?", C(df["Risk Signals"] > 1)),
 
     # --- compound filters ------------------------------------------------
     ("compound", "How many seniors are at high risk?", C((df["Year"] == "Senior") & (df["Risk Level"] == "High Risk"))),
@@ -100,19 +108,21 @@ QS: list[tuple[str, str, str]] = [
         C((g < 2.0) & (df["Attendance Category"] == "Needs Attendance Support"))),
     ("compound", "How many high-risk students are in bad standing?",
         C((df["Risk Level"] == "High Risk") & (df["Standing"] == "Bad Standing"))),
-    ("compound", "How many Health Sciences students are at high risk?",
-        C((df["Discipline"] == "Health Sciences") & (df["Risk Level"] == "High Risk"))),
+    # ("compound", "How many Health Sciences students are at high risk?",
+    #     C((df["Discipline"] == "Health Sciences") & (df["Risk Level"] == "High Risk"))),
     ("compound", "How many online students are seniors?",
         C((df["Location"] == "Online") & (df["Year"] == "Senior"))),
     # "between" is inclusive on both ends, matching SQL's BETWEEN and the
     # app's own core.query_engine "between" operator -- a GPA of exactly
     # 3.0 counts.
     ("compound", "How many students have a GPA between 2.0 and 3.0?", C((g >= 2.0) & (g <= 3.0))),
+    # ("compound", "How many students with a second major are also at high risk?",
+    #     C(df["Second Major"].notna() & (df["Risk Level"] == "High Risk"))),
 
     # --- distinct counts -------------------------------------------------
-    ("distinct", "How many different majors are there?", str(int(df["Major"].nunique()))),
+    # ("distinct", "How many different majors are there?", str(int(df["Major"].nunique()))),
     ("distinct", "How many advisors are there?", str(int(df["Advisor"].nunique()))),
-    ("distinct", "How many disciplines are there?", str(int(df["Discipline"].nunique()))),
+    # ("distinct", "How many disciplines are there?", str(int(df["Discipline"].nunique()))),
     ("distinct", "How many campus locations are there?", str(int(df["Location"].nunique()))),
 
     # --- aggregates ------------------------------------------------------
@@ -122,17 +132,26 @@ QS: list[tuple[str, str, str]] = [
     ("aggregate", "What is the average SAT Total?", num(df["SAT Total"].mean(), 0)),
     ("aggregate", "What is the highest SAT Total?", str(int(df["SAT Total"].max()))),
     ("aggregate", "What is the average PSAT Total?", num(df["PSAT Total"].mean(), 0)),
+    # Location was previously only ever used in a groupby ranking (Q37); this
+    # tests it as a plain filter feeding an aggregate instead. Attendance Rate
+    # is stored (and reported by the app) as a raw fraction, not a percent.
+    ("aggregate", "What is the average attendance rate for online students?",
+        num(df.loc[df["Location"] == "Online", "Attendance Rate"].mean(), 2)),
+    ("aggregate", "What is the average attendance rate for students on Main Campus?",
+        num(df.loc[df["Location"] == "Main Campus", "Attendance Rate"].mean(), 2)),
 
     # --- groupby / rank (string answers) ---------------------------------
-    ("groupby", "Which discipline has the lowest average GPA?", df.assign(G=g).groupby("Discipline")["G"].mean().idxmin()),
-    ("groupby", "Which discipline has the highest average GPA?", df.assign(G=g).groupby("Discipline")["G"].mean().idxmax()),
-    ("groupby", "Which discipline has the highest average attendance rate?", df.groupby("Discipline")["Attendance Rate"].mean().idxmax()),
+    # Discipline-as-academic-field groupbys commented out during the K-12
+    # pivot -- same reasoning as the count/compound/distinct section above.
+    # ("groupby", "Which discipline has the lowest average GPA?", df.assign(G=g).groupby("Discipline")["G"].mean().idxmin()),
+    # ("groupby", "Which discipline has the highest average GPA?", df.assign(G=g).groupby("Discipline")["G"].mean().idxmax()),
+    # ("groupby", "Which discipline has the highest average attendance rate?", df.groupby("Discipline")["Attendance Rate"].mean().idxmax()),
     # Ties are real: several advisors can share the max. Accept any tied winner.
     ("groupby", "Which advisor has the most high-risk students?",
         "|".join(_hr.index[_hr == _hr.max()]) if not (_hr := df[df["Risk Level"] == "High Risk"].groupby("Advisor").size()).empty else ""),
     ("groupby", "Which year level has the most students?", df["Year"].value_counts().idxmax()),
     ("groupby", "Which campus has the most students?", df["Location"].value_counts().idxmax()),
-    ("groupby", "Which discipline has the most students?", df["Discipline"].value_counts().idxmax()),
+    # ("groupby", "Which discipline has the most students?", df["Discipline"].value_counts().idxmax()),
 
     # --- percentage ------------------------------------------------------
     ("percentage", "What percentage of students are high risk?", num((df["Risk Level"] == "High Risk").mean() * 100, 0)),
@@ -154,7 +173,7 @@ QS: list[tuple[str, str, str]] = [
     # --- figure routes (graded on routing) -------------------------------
     ("figure", "Make a bar chart of students by risk level", "[kind:FIGURE]"),
     ("figure", "Plot the distribution of GPA", "[kind:FIGURE]"),
-    ("figure", "Show a pie chart of students by discipline", "[kind:FIGURE]"),
+    # ("figure", "Show a pie chart of students by discipline", "[kind:FIGURE]"),
     ("figure", "Graph attendance rate by year", "[kind:FIGURE]"),
 
     # --- negative / out-of-scope (should NOT answer as a query) ----------

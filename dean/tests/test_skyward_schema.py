@@ -19,8 +19,14 @@ def test_new_skyward_canonical_fields_detected():
 
 
 def test_discipline_information_maps_to_conduct_not_department():
+    # "Discipline Information" is Skyward's real, specific behavioral report
+    # name -> conduct_status. Bare "Discipline" is ambiguous in general school-
+    # roster usage and means academic field of study far more often (the
+    # higher-ed sense: Engineering, Nursing, ...) -- it maps to department,
+    # matching the chat-facing "discipline" concept in knowledge/synonyms.json
+    # and avoiding a real collision found on the (non-Skyward) mock rosters.
     assert canonical_for("Discipline Information") == "conduct_status"
-    assert canonical_for("Discipline") == "conduct_status"
+    assert canonical_for("Discipline") == "department"
     assert canonical_for("Department") == "department"
 
 

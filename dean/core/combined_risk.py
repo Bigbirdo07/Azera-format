@@ -74,9 +74,16 @@ def attach_combined_risk(
         ))
 
     if "Attendance Rate" in out.columns:
-        out["Attendance Risk"] = (
-            pd.to_numeric(out["Attendance Rate"], errors="coerce") < att_t
-        )
+        attendance_rate = pd.to_numeric(out["Attendance Rate"], errors="coerce")
+        # Attendance Rate is stored as a 0-1 fraction (0.94, not 94); the
+        # threshold (module default / RiskSettings) is always expressed on a
+        # 0-100 scale, matching the UI and this module's own docstring ("<
+        # 90%"). Comparing the two scales directly meant every row with any
+        # attendance data satisfied "< 90" and was silently flagged at risk
+        # regardless of actual attendance -- confirmed on every roster used
+        # this session, college and Skyward alike.
+        att_threshold = att_t / 100.0 if att_t > 1 else att_t
+        out["Attendance Risk"] = attendance_rate < att_threshold
         signals.append(out["Attendance Risk"].fillna(False))
         reason_fragments.append(_label_when_true(
             out["Attendance Risk"].fillna(False),

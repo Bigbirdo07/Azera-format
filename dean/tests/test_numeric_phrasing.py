@@ -7,6 +7,7 @@ blocking the article 'a/an/the' in between.
 
 from __future__ import annotations
 
+import pandas as pd
 import pytest
 
 from nlp.query_planner import _detect_filters, _numeric_filter
@@ -137,4 +138,63 @@ def test_genuine_and_clause_still_splits_into_two_filters(columns, synonyms):
     assert filters == [
         {"column": "GPA", "operator": "less_than", "value": 2.0},
         {"column": "Attendance Rate", "operator": "less_than", "value": 0.9},
+    ]
+
+
+def test_missed_days_resolves_to_days_absent_not_calendar_days(synonyms):
+    from nlp.query_planner import plan_query
+
+    cols = ["Attendance Calendar Days", "Days Present", "Days Absent", "Attendance Rate"]
+    frame = pd.DataFrame({c: [0] for c in cols})
+    result = plan_query(
+        user_request="How many students have missed more than 15 days?",
+        selected_sheet="Students", sheet_columns={"Students": cols}, frame=frame,
+    )
+    assert result.query["filters"] == [
+        {"column": "Days Absent", "operator": "greater_than", "value": 15}
+    ]
+
+
+def test_spelled_out_small_number_produces_a_filter(synonyms):
+    from nlp.query_planner import plan_query
+
+    cols = ["Risk Signals", "Risk Level"]
+    frame = pd.DataFrame({"Risk Signals": [1, 2], "Risk Level": ["Low", "High"]})
+    result = plan_query(
+        user_request="How many students have more than one risk signal?",
+        selected_sheet="Students", sheet_columns={"Students": cols}, frame=frame,
+    )
+    assert result.query["filters"] == [
+        {"column": "Risk Signals", "operator": "greater_than", "value": 1}
+    ]
+
+
+def test_assessment_column_name_does_not_collide_with_a_matching_major_value(synonyms):
+    from nlp.query_planner import plan_query
+
+    cols = ["SAT English", "Major"]
+    frame = pd.DataFrame({"SAT English": [700, 600], "Major": ["English", "History"]})
+    result = plan_query(
+        user_request="How many students scored above 650 on SAT English?",
+        selected_sheet="Students", sheet_columns={"Students": cols}, frame=frame,
+    )
+    assert result.query["filters"] == [
+        {"column": "SAT English", "operator": "greater_than", "value": 650}
+    ]
+
+
+def test_gpa_question_does_not_collide_with_derived_risk_reason_text(synonyms):
+    from nlp.query_planner import plan_query
+
+    cols = ["GPA", "Risk Reason"]
+    frame = pd.DataFrame({
+        "GPA": [1.5, 3.5],
+        "Risk Reason": ["GPA below 2.0", ""],
+    })
+    result = plan_query(
+        user_request="How many students have a GPA below 2.0?",
+        selected_sheet="Students", sheet_columns={"Students": cols}, frame=frame,
+    )
+    assert result.query["filters"] == [
+        {"column": "GPA", "operator": "less_than", "value": 2.0}
     ]

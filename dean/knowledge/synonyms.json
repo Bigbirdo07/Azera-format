@@ -1,6 +1,5 @@
 {
   "balance_due": ["balance due", "balance", "balances", "owe", "owes", "owed", "owing", "still owe money", "still owes", "money due", "amount due", "tuition balance", "unpaid balance", "owes money", "money owed", "outstanding balance"],
-  "fafsa_status": ["fafsa", "fasfa", "financial aid", "aid form", "financial aid form", "aid status", "missing aid", "aid documents", "financial aid incomplete"],
   "program": ["program", "programs", "major", "majors", "degree", "degrees", "plan", "plans", "degree program", "college"],
   "discipline": ["discipline", "disciplines", "department", "departments", "dept", "depts", "field", "fields", "field of study", "fields of study", "area", "areas", "area of study", "areas of study", "subject", "subjects", "domain", "domains"],
   "enrollment_status": ["enrollment status", "status", "registered", "registration", "active", "inactive", "not registered", "enrolled", "not enrolled", "withdrawn"],
@@ -19,7 +18,7 @@
   "credits": ["credits", "credit", "credits completed", "credit hours", "earned credits", "completed credits", "credit count", "hours earned"],
   "year": ["year", "class year", "class", "academic year", "level", "grade level", "grade", "grades", "graders", "freshman", "sophomore", "junior", "senior", "seniors", "freshmen", "sophomores", "juniors", "kindergarten", "pre-k", "prek", "preschool"],
   "attendance_rate": ["attendance", "attendance rate", "attendance percent", "attendance percentage", "attendance pct", "attendance %", "present rate"],
-  "days_absent": ["days absent", "absences", "absent", "absent days", "missed days", "days missed", "total absences", "absence count", "number of absences"],
+  "days_absent": ["days absent", "absences", "absent", "absent days", "missed days", "days missed", "missed", "total absences", "absence count", "number of absences"],
   "days_tardy": ["tardies", "tardy", "days tardy", "late days", "tardy count", "number of tardies"],
   "unexcused_absences": ["unexcused absences", "unexcused", "unexcused absence", "unexcused days"],
   "excused_absences": ["excused absences", "excused absence", "excused days", "excused"],

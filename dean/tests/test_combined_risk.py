@@ -66,11 +66,16 @@ def _route(message: str, sheets, sheet_columns):
 
 
 def test_combined_risk_attaches_signals_and_level():
-    """attach_combined_risk fold: 2+ signals → High Risk, 1 → Moderate, 0 → Low."""
+    """attach_combined_risk fold: 2+ signals → High Risk, 1 → Moderate, 0 → Low.
+
+    Attendance Rate as a 0-1 fraction, matching every real roster's actual
+    convention (and attach_combined_risk's own comparison, which converts the
+    percentage-scale threshold to match) -- not a 0-100 percentage.
+    """
     df = pd.DataFrame({
         "Student ID": ["A", "B", "C", "D"],
         "GPA": [3.9, 1.5, 1.5, 3.0],
-        "Attendance Rate": [98.0, 95.0, 70.0, 88.0],
+        "Attendance Rate": [0.98, 0.95, 0.70, 0.88],
         "Academic Standing": ["Good Standing", "Good Standing",
                               "Probation", "Good Standing"],
     })
@@ -87,6 +92,22 @@ def test_combined_risk_attaches_signals_and_level():
     # D: Attendance only (88 < 90) → Moderate.
     assert out.loc["D", "Risk Signals"] == 1
     assert out.loc["D", "Risk Level"] == "Moderate Risk"
+
+
+def test_attendance_risk_does_not_flag_every_row():
+    # Regression: Attendance Rate is a 0-1 fraction; the threshold is a 0-100
+    # percentage. Comparing them directly without scaling meant every row
+    # satisfied "< 90" regardless of actual attendance, silently flagging
+    # 100% of any roster as attendance-risk (confirmed on real rosters this
+    # session: 300/300 and 250/250 before this fix).
+    df = pd.DataFrame({
+        "Student ID": ["A", "B", "C"],
+        "Attendance Rate": [0.99, 0.95, 0.85],
+    })
+    out = attach_combined_risk(df).set_index("Student ID")
+    assert out.loc["A", "Attendance Risk"] == False
+    assert out.loc["B", "Attendance Risk"] == False
+    assert out.loc["C", "Attendance Risk"] == True
 
 
 def test_risk_settings_defaults_are_correct():

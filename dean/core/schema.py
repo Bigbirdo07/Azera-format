@@ -32,7 +32,14 @@ CANONICAL_FIELDS: list[tuple[str, tuple[str, ...]]] = [
                                  "guardian contact", "parent contact",
                                  "guardian phone", "parent phone",
                                  "guardian email", "parent email")),
-    ("department", ("department", "dept", "division", "subject", "academic department", "teaching department")),
+    # Bare "discipline"/"disciplines" means academic field of study in most
+    # school-roster usage (Engineering, Nursing, ...) -- the higher-ed sense,
+    # and the one the chat-facing "discipline" concept in
+    # knowledge/synonyms.json already assumes. Skyward's actual behavioral
+    # report is always "Discipline Information" (see conduct_status below),
+    # never bare "Discipline", so this doesn't collide with a real export.
+    ("department", ("department", "dept", "division", "subject", "academic department",
+                    "teaching department", "discipline", "disciplines")),
     ("major", ("major", "academic program", "program of study", "concentration", "academic concentration")),
     ("program", ("program", "concentration track")),
     ("concentration", ("concentration",)),
@@ -51,14 +58,22 @@ CANONICAL_FIELDS: list[tuple[str, tuple[str, ...]]] = [
     ("course", ("course", "class", "section", "course name", "class name")),
     ("class_level", ("class level", "student level", "level")),
     ("year", ("year", "class year", "class", "academic year")),
-    ("credits_completed", ("credits completed", "credits earned", "completed credits", "earned credits", "credits")),
-    ("credits_attempted", ("credits attempted", "attempted credits")),
+    # credits_completed / credits_attempted / financial_aid_status: college
+    # credit-hour and FAFSA/financial-aid concepts with no K-12 equivalent --
+    # commented out (not deleted) during the K-12/Skyward pivot. Zero test
+    # dependency confirmed before removing. Restore if the product ever
+    # serves colleges again.
+    # ("credits_completed", ("credits completed", "credits earned", "completed credits", "earned credits", "credits")),
+    # ("credits_attempted", ("credits attempted", "attempted credits")),
     ("advisor", ("advisor", "adviser", "faculty advisor", "counselor", "advisor name")),
     ("academic_status", ("academic status", "academic standing", "standing", "status")),
     ("graduation_status", ("graduation status", "grad status", "graduated")),
     ("enrollment_status", ("enrollment status", "registration status", "enrolled", "registered")),
-    ("financial_aid_status", ("financial aid status", "financial aid", "fafsa", "aid status")),
-    ("conduct_status", ("conduct status", "conduct", "disciplinary status", "discipline",
+    # ("financial_aid_status", ("financial aid status", "financial aid", "fafsa", "aid status")),
+    # Bare "discipline" is deliberately excluded here -- it collides with the
+    # academic-field-of-study sense (see department above). Skyward's real
+    # export field is always the multi-word "Discipline Information".
+    ("conduct_status", ("conduct status", "conduct", "disciplinary status",
                         "discipline information", "discipline record", "discipline incidents",
                         "behavior incidents", "office referrals")),
     ("notes", ("notes", "note", "comments", "remarks")),
