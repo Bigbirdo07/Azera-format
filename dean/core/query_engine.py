@@ -1207,18 +1207,19 @@ def _condition_mask(frame: pd.DataFrame, condition: dict[str, Any]) -> pd.Series
         return _text_eq(series, value)
     if operator == "not_equals":
         return ~_text_eq(series, value)
-    if operator == "greater_than":
+    if operator in {"greater_than", "greater_or_equal", "less_than", "less_or_equal"}:
+        date_mask = _year_boundary_date_mask(series, value, operator)
+        if date_mask is not None:
+            return date_mask
         numeric = pd.to_numeric(series, errors="coerce")
-        return numeric > _scaled_numeric_value(series, value)
-    if operator == "greater_or_equal":
-        numeric = pd.to_numeric(series, errors="coerce")
-        return numeric >= _scaled_numeric_value(series, value)
-    if operator == "less_than":
-        numeric = pd.to_numeric(series, errors="coerce")
-        return numeric < _scaled_numeric_value(series, value)
-    if operator == "less_or_equal":
-        numeric = pd.to_numeric(series, errors="coerce")
-        return numeric <= _scaled_numeric_value(series, value)
+        threshold = _scaled_numeric_value(series, value)
+        if operator == "greater_than":
+            return numeric > threshold
+        if operator == "greater_or_equal":
+            return numeric >= threshold
+        if operator == "less_than":
+            return numeric < threshold
+        return numeric <= threshold
     if operator == "contains":
         return series.astype(str).str.contains(str(value), case=False, na=False)
     if operator == "contains_any":
@@ -1252,6 +1253,46 @@ def _condition_mask(frame: pd.DataFrame, condition: dict[str, Any]) -> pd.Series
     if operator == "is_not_missing" or operator == "is_not_blank":
         return ~_blank_mask(series)
     raise QueryExecutionError(f"Unsupported operator: {operator!r}")
+
+
+def _year_equals_date_mask(series: pd.Series, value: Any) -> pd.Series | None:
+    try:
+        year = int(value)
+    except (TypeError, ValueError):
+        return None
+    if not (1900 <= year <= 2100):
+        return None
+    start_of_year = pd.Timestamp(year=year, month=1, day=1)
+    end_of_year = pd.Timestamp(year=year, month=12, day=31, hour=23, minute=59, second=59)
+    return (series >= start_of_year) & (series <= end_of_year)
+
+
+def _year_boundary_date_mask(series: pd.Series, value: Any, operator: str) -> pd.Series | None:
+    """Compare a real datetime column against a bare year ("born before
+    2010", "entered after 2023"). pd.to_numeric on a datetime series returns
+    nanosecond-epoch ints, so a plain numeric comparison against a year like
+    2010 would silently compare the wrong magnitude -- this resolves the
+    year into a year-boundary Timestamp instead, on the columns that are
+    actually a date dtype. Returns None for any other column so the normal
+    numeric path handles it (e.g. Grad Year, a genuine int column).
+    """
+    if not pd.api.types.is_datetime64_any_dtype(series):
+        return None
+    try:
+        year = int(value)
+    except (TypeError, ValueError):
+        return None
+    if not (1900 <= year <= 2100):
+        return None
+    start_of_year = pd.Timestamp(year=year, month=1, day=1)
+    end_of_year = pd.Timestamp(year=year, month=12, day=31, hour=23, minute=59, second=59)
+    if operator == "greater_than":
+        return series > end_of_year
+    if operator == "greater_or_equal":
+        return series >= start_of_year
+    if operator == "less_than":
+        return series < start_of_year
+    return series <= end_of_year
 
 
 def _scaled_numeric_value(series: pd.Series, value: Any) -> float:
@@ -1298,6 +1339,13 @@ def _membership_mask(series: pd.Series, value: Any) -> pd.Series:
 
 
 def _text_eq(series: pd.Series, value: Any) -> pd.Series:
+    if pd.api.types.is_datetime64_any_dtype(series):
+        # "equals" against a real datetime column with a bare year value
+        # ("entered in 2024") means within that calendar year, not a literal
+        # Timestamp == int comparison (which would silently match nothing).
+        year_mask = _year_equals_date_mask(series, value)
+        if year_mask is not None:
+            return year_mask
     if pd.api.types.is_object_dtype(series) or pd.api.types.is_string_dtype(series):
         return series.astype(str).str.casefold() == str(value).casefold()
     if pd.api.types.is_numeric_dtype(series) and not isinstance(value, (int, float)):

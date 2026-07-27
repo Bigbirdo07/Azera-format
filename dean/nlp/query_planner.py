@@ -37,21 +37,38 @@ _MISSING_STATUS_VALUES = ["Missing", "Incomplete", "Not Submitted", ""]
 # through to the GPA-range default.
 _NUMERIC_CONCEPTS = (
     "balance_due", "gpa", "attendance_rate",
-    "days_absent", "days_tardy", "unexcused_absences",
+    # unexcused_absences / excused_absences checked BEFORE the generic
+    # days_absent: days_absent's own synonyms include bare "absences", which
+    # is also a substring of "unexcused absences"/"excused absences" -- if
+    # the generic concept were checked first it would match, then tie-break
+    # by column order (not correctness) between the two real columns on a
+    # roster that splits attendance into Excused/Unexcused rather than one
+    # combined Days Absent column. Specific concepts must win first.
+    "unexcused_absences", "excused_absences", "days_absent", "days_tardy",
     "sat_math", "sat_ebrw", "sat_total",
     "psat_math", "psat_reading_writing", "psat_total",
     "math_score", "reading_writing_score", "total_score",
+    "grad_year",
+    # Date columns compared by bare year ("born before 2010", "entered after
+    # 2023"). core.query_engine converts the year into a date boundary when
+    # the target column is a real datetime dtype -- see
+    # _year_boundary_for_datetime_comparison there.
+    "date_of_birth", "entry_date", "withdrawal_date",
 )
 
 _COMPARISON_WORDS = {
     "greater_than": [
         "greater than", "more than", "higher than", "larger than",
         "over", "above", "exceeds", "exceeding",
+        # "after" for year/date-shaped numeric concepts (grad year, entry/
+        # withdrawal date once those support numeric comparison) -- natural
+        # phrasing that had no comparison-word coverage at all before.
+        "after",
     ],
     "greater_or_equal": ["at least", "or more", "or higher", "or above", "or greater", "and up", "and above", "and over"],
     "less_than": [
         "less than", "lower than", "smaller than", "fewer than",
-        "under", "below",
+        "under", "below", "before",
     ],
     "less_or_equal": ["at most", "or less", "or lower", "or below", "or fewer", "and down", "and below", "up to"],
 }
@@ -1015,6 +1032,23 @@ def _detect_filters(text: str, columns: list[str], synonyms: dict[str, Any],
         if column and score >= 0.55:
             filters.append({"column": column, "operator": "is_missing"})
 
+    # Have withdrawn / has withdrawn. "withdrawn"/"withdrew" don't literally
+    # contain "withdrawal date" (the column name), so the generic have/has
+    # literal-substring fallback below never catches this common phrasing --
+    # it needs the same concept-level bridge as "no advisor" above.
+    if any(_term_in_text(p, text) for p in ("withdrawn", "withdrew", "have withdrawal")):
+        column, score = match_column_for_concept("withdrawal_date", columns, synonyms)
+        if column and score >= 0.55:
+            filters.append({"column": column, "operator": "is_not_missing"})
+
+    # Discipline/conduct record on file. "discipline record"/"conduct record"
+    # don't literally contain "discipline information" (the real Skyward
+    # column name), same class of gap as withdrawal above.
+    if any(_term_in_text(p, text) for p in ("discipline record", "conduct record", "disciplinary record")):
+        column, score = match_column_for_concept("conduct_status", columns, synonyms)
+        if column and score >= 0.55:
+            filters.append({"column": column, "operator": "is_not_missing"})
+
     # Owe money / unpaid balance (> 0).
     if any(_term_in_text(p, text) for p in ("owe", "unpaid", "balance due", "owes money", "outstanding")):
         column, score = match_column_for_concept("balance_due", columns, synonyms)
@@ -1778,6 +1812,42 @@ def _numeric_filter(text: str, columns: list[str], synonyms: dict[str, Any]) -> 
             if resolved:
                 return resolved
 
+    # 4. Bare equality: "grad year of 2028", "unexcused absence count of 0",
+    # "gpa of 3.5". Without this, a question naming a numeric concept but no
+    # comparison word (no "above"/"or more"/">"/...) silently matched zero
+    # filters and fell through to an unfiltered row count -- a confidently
+    # wrong answer, not an honest "I don't know" (e.g. "how many students
+    # have an unexcused absence count of 0" used to return all 250 rows).
+    # Concept-resolution only (no literal-substring or GPA-range default) so
+    # this can't misfire on unrelated "... out of 250" style phrasing.
+    match = re.search(r"([a-z0-9 ]*?)\bof\s+([0-9]+(?:\.[0-9]+)?)\b([a-z0-9 ]*)", text)
+    if match:
+        before = " ".join(match.group(1).strip().split()[-3:])
+        after = " ".join(match.group(3).strip().split()[:3])
+        column = (
+            _resolve_numeric_column_by_concept(before, columns, synonyms)
+            or _resolve_numeric_column_by_concept(after, columns, synonyms)
+        )
+        if column:
+            number = float(match.group(2))
+            value: float | int = number if number != int(number) else int(number)
+            return {"column": column, "operator": "equals", "value": value}
+
+    # 5. Bare year: "entered in 2024", "born in 2010", "graduating in 2028".
+    # Same rationale as #4 -- these silently answered with the unfiltered
+    # count before. Restricted to a plausible 4-digit year and concept-only
+    # resolution for the same false-positive reasons.
+    match = re.search(r"([a-z0-9 ]*?)\bin\s+((?:19|20)\d{2})\b([a-z0-9 ]*)", text)
+    if match:
+        before = " ".join(match.group(1).strip().split()[-3:])
+        after = " ".join(match.group(3).strip().split()[:3])
+        column = (
+            _resolve_numeric_column_by_concept(before, columns, synonyms)
+            or _resolve_numeric_column_by_concept(after, columns, synonyms)
+        )
+        if column:
+            return {"column": column, "operator": "equals", "value": int(match.group(2))}
+
     return None
 
 
@@ -1914,7 +1984,19 @@ def _resolve_comparison(
     number = float(number_text)
     before = " ".join(before_text.strip().split()[-3:])
     after = " ".join(after_text.strip().split()[:3])
-    column = _resolve_numeric_column(before, columns, synonyms) or _resolve_numeric_column(after, columns, synonyms)
+    # Concept-level matches on EITHER side outrank a generic literal-substring
+    # match on either side. Without this, "9th graders have more than 3
+    # unexcused absences" resolved to "Grade" -- the leading, unrelated
+    # "9th graders" fragment literal-substring-matched the Grade column
+    # (via "grade" inside "graders") before the adjacent, far more specific
+    # "unexcused absences" concept match on the trailing side ever got a
+    # chance to run.
+    column = (
+        _resolve_numeric_column_by_concept(before, columns, synonyms)
+        or _resolve_numeric_column_by_concept(after, columns, synonyms)
+        or _resolve_numeric_column_by_literal(before, columns)
+        or _resolve_numeric_column_by_literal(after, columns)
+    )
     # Bare comparisons with no named column default to GPA when the number is
     # in a plausible GPA range — matches the previous behavior.
     if not column and 0.0 <= number <= 5.0:
@@ -1942,17 +2024,28 @@ def _normalize_rate_threshold(
     return number
 
 
-def _resolve_numeric_column(phrase: str, columns: list[str], synonyms: dict[str, Any]) -> str | None:
+def _resolve_numeric_column_by_concept(phrase: str, columns: list[str], synonyms: dict[str, Any]) -> str | None:
     for concept in _NUMERIC_CONCEPTS:
         terms = [concept.replace("_", " "), *synonyms.get(concept, [])]
         if any(normalize_text(t) in phrase for t in terms):
             col, s = match_column_for_concept(concept, columns, synonyms)
             if col and s >= 0.55:
                 return col
+    return None
+
+
+def _resolve_numeric_column_by_literal(phrase: str, columns: list[str]) -> str | None:
     column, score = match_column_by_terms([phrase], columns)
     if column and score >= 0.6:
         return column
     return None
+
+
+def _resolve_numeric_column(phrase: str, columns: list[str], synonyms: dict[str, Any]) -> str | None:
+    return (
+        _resolve_numeric_column_by_concept(phrase, columns, synonyms)
+        or _resolve_numeric_column_by_literal(phrase, columns)
+    )
 
 
 def _detect_sort(text: str, columns: list[str], synonyms: dict[str, Any]) -> dict[str, Any] | None:
@@ -2081,6 +2174,19 @@ _K12_ORDINAL_WORDS: dict[str, str] = {
     "eleventh": "11", "twelfth": "12",
 }
 _K12_KINDERGARTEN_TOKENS = ("kindergarten", "pre-k", "prek", "pre k", "preschool")
+# HS grade-level names ("freshman", "senior") -> the numeric grade they name.
+# These words are also listed as "year" concept synonyms (so the column
+# resolves), which meant _detect_count_unique's phrase-to-column matcher
+# treated "how many freshmen are there" as asking for a distinct-value count
+# of the Grade column itself, rather than a count filtered to Grade == 9 --
+# real bug found testing the Skyward roster, where Grade is a numeric column
+# (9-12) with no "Freshman"/"Senior" text values to fall back on.
+_K12_GRADE_NAME_WORDS: dict[str, str] = {
+    "freshman": "9", "freshmen": "9",
+    "sophomore": "10", "sophomores": "10",
+    "junior": "11", "juniors": "11",
+    "senior": "12", "seniors": "12",
+}
 
 
 def _grade_level_filter(
@@ -2101,6 +2207,22 @@ def _grade_level_filter(
     raw = user_request.lower()
     norm = normalize_text(user_request)
 
+    # Multiple HS grade-level names in one question ("freshmen and
+    # sophomores", "juniors or seniors") -> an "in" filter across all of
+    # them. Without this, only the first name matched (see single-candidate
+    # logic below) and the rest were silently dropped -- "how many freshmen
+    # and sophomores are there" answered with the freshman count alone.
+    grade_name_digits: list[str] = []
+    for word, digit in _K12_GRADE_NAME_WORDS.items():
+        if re.search(rf"\b{word}\b", norm) and digit not in grade_name_digits:
+            grade_name_digits.append(digit)
+    if len(grade_name_digits) > 1:
+        values = [str(v) for v in frame[grade_column].dropna().unique().tolist()]
+        matched = [v for v in values if v.casefold() in grade_name_digits]
+        if matched:
+            return {"column": grade_column, "operator": "in", "value": matched}
+        return {"column": grade_column, "operator": "in", "value": grade_name_digits}
+
     candidate: str | None = None
 
     # "K" / "kindergarten" / "pre-k".
@@ -2110,6 +2232,13 @@ def _grade_level_filter(
         # Standalone "K" (school code) — guarded so it doesn't capture every "k".
         if re.search(r"\b(?:in\s+|grade\s+|grades?\s+)k\b", norm) or re.search(r"\bk\s+grade(?:rs)?\b", norm):
             candidate = "K"
+
+    # HS grade-level name: "freshman", "how many seniors are there".
+    if candidate is None:
+        for word, digit in _K12_GRADE_NAME_WORDS.items():
+            if re.search(rf"\b{word}\b", norm):
+                candidate = digit
+                break
 
     # Ordinal-word form: "fifth grade", "twelfth graders".
     if candidate is None:

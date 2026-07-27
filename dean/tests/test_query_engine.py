@@ -228,6 +228,53 @@ def test_is_blank(mini):
     assert _mini_count(mini, "Notes", "is_blank") == 3  # "", None, "  "
 
 
+def test_year_comparison_against_real_datetime_column_uses_year_boundary(mini):
+    # Regression: "how many students were born before 2010" resolved to a
+    # numeric filter (Birth Date < 2010), and pd.to_numeric on a datetime
+    # series returns nanosecond-epoch ints -- comparing that against a bare
+    # year like 2010 silently matched every row (or none), never the actual
+    # date boundary. less_than/greater_than must convert a bare year into a
+    # year-boundary Timestamp when the column is a real datetime dtype.
+    df = pd.DataFrame({
+        "Student ID": ["A", "B", "C"],
+        "Birth Date": pd.to_datetime(["2009-05-01", "2010-06-15", "2011-01-01"]),
+    })
+    sheets = {"Students": df}
+    less = run_query(
+        {"operation": "count_rows", "sheet": "Students", "filters": [
+            {"column": "Birth Date", "operator": "less_than", "value": 2010},
+        ]},
+        sheets,
+    )
+    greater = run_query(
+        {"operation": "count_rows", "sheet": "Students", "filters": [
+            {"column": "Birth Date", "operator": "greater_than", "value": 2010},
+        ]},
+        sheets,
+    )
+    assert less.value == 1  # only the 2009 birth date
+    assert greater.value == 1  # only the 2011 birth date
+
+
+def test_equals_against_datetime_column_with_bare_year_matches_within_year(mini):
+    # Regression: "how many students entered in 2024" resolved to an
+    # equals filter with an int year value against a datetime column.
+    # Literal Timestamp == int comparison silently matches nothing --
+    # "equals" against a real datetime column must mean "within that
+    # calendar year", not exact identity.
+    df = pd.DataFrame({
+        "Student ID": ["A", "B", "C"],
+        "Entry Date": pd.to_datetime(["2023-08-01", "2024-01-15", "2024-12-31"]),
+    })
+    result = run_query(
+        {"operation": "count_rows", "sheet": "Students", "filters": [
+            {"column": "Entry Date", "operator": "equals", "value": 2024},
+        ]},
+        {"Students": df},
+    )
+    assert result.value == 2
+
+
 def test_equals_matches_numeric_column_against_string_filter_value(mini):
     # The query planner always produces string filter values (regex
     # captures), even for an already-numeric column. "equals" must coerce

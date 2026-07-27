@@ -198,3 +198,101 @@ def test_gpa_question_does_not_collide_with_derived_risk_reason_text(synonyms):
     assert result.query["filters"] == [
         {"column": "GPA", "operator": "less_than", "value": 2.0}
     ]
+
+
+def test_before_after_resolve_as_less_greater_than(columns, synonyms):
+    filters = _detect_filters("how many students above a 2 gpa and before 2028", columns, synonyms)
+    # Sanity: "before"/"after" register as real comparison words at all,
+    # exercised directly on a concept that had zero comparison-word coverage
+    # before this fix (grad_year, added to _NUMERIC_CONCEPTS this session).
+    from nlp.query_planner import _numeric_filter
+    cols = ["Grad Year"]
+    assert _numeric_filter("grad year before 2028", cols, synonyms) == {
+        "column": "Grad Year", "operator": "less_than", "value": 2028,
+    }
+    assert _numeric_filter("grad year after 2027", cols, synonyms) == {
+        "column": "Grad Year", "operator": "greater_than", "value": 2027,
+    }
+
+
+def test_have_withdrawn_resolves_to_withdrawal_date_presence(synonyms):
+    # "withdrawn" doesn't literally contain "withdrawal date" (the column
+    # name), so this needs concept-level resolution, not the generic
+    # have/has literal-substring fallback.
+    cols = ["Student ID", "Name", "Withdrawal Date", "Discipline Information"]
+    filters = _detect_filters("how many students have withdrawn", cols, synonyms)
+    assert filters == [{"column": "Withdrawal Date", "operator": "is_not_missing"}]
+
+
+def test_discipline_record_on_file_resolves_to_conduct_column_presence(synonyms):
+    # "discipline record" doesn't literally contain "discipline information"
+    # (the real Skyward column name) -- same gap as withdrawal above.
+    cols = ["Student ID", "Name", "Withdrawal Date", "Discipline Information"]
+    filters = _detect_filters(
+        "how many students have a discipline record on file", cols, synonyms,
+    )
+    assert filters == [{"column": "Discipline Information", "operator": "is_not_missing"}]
+
+
+def test_bare_of_n_equality_resolves_for_a_recognized_numeric_concept(synonyms):
+    # Regression: "unexcused absence count of 0" had no comparison word at
+    # all (no "above"/"or more"/">"), so it silently matched zero filters
+    # and fell through to an unfiltered row count -- a confidently wrong
+    # answer. Concept-resolution only, so it can't misfire on unrelated
+    # "... out of 250" style phrasing (no numeric concept nearby there).
+    from nlp.query_planner import _numeric_filter
+
+    cols = ["Grade", "Unexcused Absences", "Excused Absences"]
+    assert _numeric_filter(
+        "how many students have an unexcused absence count of 0", cols, synonyms,
+    ) == {"column": "Unexcused Absences", "operator": "equals", "value": 0}
+
+
+def test_bare_of_n_equality_does_not_misfire_on_unrelated_out_of_phrasing(synonyms):
+    from nlp.query_planner import _numeric_filter
+
+    cols = ["Grade", "Unexcused Absences", "GPA", "Advisor"]
+    assert _numeric_filter("top 5 students out of 250", cols, synonyms) is None
+    assert _numeric_filter("average gpa of the class", cols, synonyms) is None
+
+
+def test_bare_year_equality_resolves_for_a_recognized_date_concept(synonyms):
+    # Regression: "entered in 2024" silently returned the unfiltered count
+    # (same failure mode as the "of N" gap above, for date columns).
+    from nlp.query_planner import _numeric_filter
+
+    cols = ["Entry Date", "Withdrawal Date", "Birth Date"]
+    assert _numeric_filter("how many students entered in 2024", cols, synonyms) == {
+        "column": "Entry Date", "operator": "equals", "value": 2024,
+    }
+
+
+def test_grade_name_prefix_does_not_steal_the_adjacent_numeric_column(synonyms):
+    # Regression: "9th graders have more than 3 unexcused absences" resolved
+    # to {"column": "Grade", "operator": "greater_than", "value": 3} -- the
+    # leading "9th graders" fragment literal-substring-matched the Grade
+    # column (via "grade" inside "graders") before the adjacent, far more
+    # specific "unexcused absences" concept match on the trailing side ever
+    # got a chance to run. Concept-level matches on either side must now
+    # outrank a generic literal-substring match on either side.
+    from nlp.query_planner import _numeric_filter
+
+    cols = ["Grade", "Unexcused Absences", "Excused Absences"]
+    assert _numeric_filter(
+        "how many 9th graders have more than 3 unexcused absences", cols, synonyms,
+    ) == {"column": "Unexcused Absences", "operator": "greater_than", "value": 3}
+
+
+def test_unexcused_absences_does_not_collide_with_excused_absences(synonyms):
+    from nlp.query_planner import plan_query
+
+    cols = ["Excused Absences", "Unexcused Absences"]
+    frame = pd.DataFrame({"Excused Absences": [1, 5], "Unexcused Absences": [2, 4]})
+    for label, expected_col in [("unexcused", "Unexcused Absences"), ("excused", "Excused Absences")]:
+        result = plan_query(
+            user_request=f"How many students have more than 3 {label} absences?",
+            selected_sheet="Students", sheet_columns={"Students": cols}, frame=frame,
+        )
+        assert result.query["filters"] == [
+            {"column": expected_col, "operator": "greater_than", "value": 3}
+        ], label

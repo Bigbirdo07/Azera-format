@@ -42,5 +42,8 @@
   "attendance_category": ["attendance category", "attendance categories", "attendance status", "attendance statuses"],
   "conduct_status": ["conduct status", "conduct", "discipline record", "discipline records", "discipline information", "discipline incidents", "discipline incident", "behavior incidents", "behavior incident", "office referral", "office referrals", "suspensions", "suspension", "expulsion", "expulsions", "infractions", "infraction"],
   "grad_year": ["grad year", "graduation year", "expected graduation", "class of"],
-  "emergency_contact": ["emergency contact", "emergency contacts", "emergency contact name", "emergency contact phone"]
+  "emergency_contact": ["emergency contact", "emergency contacts", "emergency contact name", "emergency contact phone"],
+  "date_of_birth": ["date of birth", "dob", "birth date", "birthdate", "born"],
+  "entry_date": ["entry date", "enrollment date", "date enrolled", "start date", "entered"],
+  "withdrawal_date": ["withdrawal date", "exit date", "date withdrawn", "dropped date", "withdrew", "withdrawn"]
 }

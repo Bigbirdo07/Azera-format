@@ -58,17 +58,23 @@ CANONICAL_FIELDS: list[tuple[str, tuple[str, ...]]] = [
     ("course", ("course", "class", "section", "course name", "class name")),
     ("class_level", ("class level", "student level", "level")),
     ("year", ("year", "class year", "class", "academic year")),
-    # credits_completed / credits_attempted / financial_aid_status: college
-    # credit-hour and FAFSA/financial-aid concepts with no K-12 equivalent --
-    # commented out (not deleted) during the K-12/Skyward pivot. Zero test
-    # dependency confirmed before removing. Restore if the product ever
-    # serves colleges again.
-    # ("credits_completed", ("credits completed", "credits earned", "completed credits", "earned credits", "credits")),
-    # ("credits_attempted", ("credits attempted", "attempted credits")),
+    # credits_completed / credits_attempted: restored (2026-07-24) -- these
+    # were miscategorized as college-only during the K-12 pivot. High
+    # schools genuinely track Carnegie-unit credits toward graduation ("24
+    # credits required," "3 credits of math"); the field map
+    # (knowledge/skyward_field_map.json) confirms credits are a real Skyward
+    # concept, just per-course (needs_join) rather than a flat roster field
+    # -- same reason schedule/course modeling is deferred, not evidence
+    # credits don't apply to HS. Recognizing the concept if a column exists
+    # is safe now; generating fake per-course-rollup data stays deferred.
+    ("credits_completed", ("credits completed", "credits earned", "completed credits", "earned credits", "credits")),
+    ("credits_attempted", ("credits attempted", "attempted credits")),
     ("advisor", ("advisor", "adviser", "faculty advisor", "counselor", "advisor name")),
     ("academic_status", ("academic status", "academic standing", "standing", "status")),
     ("graduation_status", ("graduation status", "grad status", "graduated")),
     ("enrollment_status", ("enrollment status", "registration status", "enrolled", "registered")),
+    # financial_aid_status stays commented out -- FAFSA/Pell Grant/Work Study
+    # are genuinely college-only, no K-12 equivalent.
     # ("financial_aid_status", ("financial aid status", "financial aid", "fafsa", "aid status")),
     # Bare "discipline" is deliberately excluded here -- it collides with the
     # academic-field-of-study sense (see department above). Skyward's real

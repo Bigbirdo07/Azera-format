@@ -161,3 +161,78 @@ def test_home_address_presence_question_answers_correctly(sheets, loaded):
     expected = len(df)  # every row has a Home Address in this generator
     message = _ask(sheets, loaded, "how many students have a home address on file")
     assert str(expected) in message
+
+
+def test_freshmen_question_filters_grade_instead_of_counting_distinct_grades(sheets, loaded):
+    # Regression: "freshman"/"senior" etc. are listed as "year" concept
+    # synonyms (so the Grade column resolves), which meant the count-unique
+    # detector treated "how many freshmen are there" as a request for the
+    # number of distinct Grade values (4) instead of a count filtered to
+    # Grade == 9. The college roster's text-valued Year column masked this
+    # because "seniors" matched an actual cell value first; Skyward's Grade
+    # column is numeric (9-12) with no such text values to fall back on.
+    df = sheets["Students"]
+    expected = int((df["Grade"] == 9).sum())
+    message = _ask(sheets, loaded, "how many freshmen are there")
+    assert str(expected) in message
+    assert "distinct" not in message.lower()
+
+
+def test_withdrawal_date_presence_question_answers_correctly(sheets, loaded):
+    df = sheets["Students"]
+    expected = int(df["Withdrawal Date"].notna().sum())
+    message = _ask(sheets, loaded, "how many students have withdrawn")
+    assert str(expected) in message
+
+
+def test_born_before_year_question_answers_correctly(sheets, loaded):
+    import pandas as pd
+
+    df = sheets["Students"]
+    expected = int((df["Birth Date"] < pd.Timestamp("2010-01-01")).sum())
+    message = _ask(sheets, loaded, "how many students were born before 2010")
+    assert str(expected) in message
+
+
+def test_entered_before_year_question_answers_correctly(sheets, loaded):
+    import pandas as pd
+
+    df = sheets["Students"]
+    expected = int((df["Entry Date"] < pd.Timestamp("2024-01-01")).sum())
+    message = _ask(sheets, loaded, "how many students entered before 2024")
+    assert str(expected) in message
+
+
+def test_freshmen_and_sophomores_question_includes_both_grades(sheets, loaded):
+    # Regression: "freshmen and sophomores" only matched the first grade
+    # name found (Grade == 9), silently dropping sophomores entirely.
+    df = sheets["Students"]
+    expected = int(((df["Grade"] == 9) | (df["Grade"] == 10)).sum())
+    message = _ask(sheets, loaded, "how many freshmen and sophomores are there")
+    assert str(expected) in message
+
+
+def test_entered_in_year_question_answers_correctly(sheets, loaded):
+    import pandas as pd
+
+    df = sheets["Students"]
+    expected = int((
+        (df["Entry Date"] >= pd.Timestamp("2024-01-01"))
+        & (df["Entry Date"] <= pd.Timestamp("2024-12-31 23:59:59"))
+    ).sum())
+    message = _ask(sheets, loaded, "how many students entered in 2024")
+    assert str(expected) in message
+
+
+def test_unexcused_absence_count_of_zero_question_answers_correctly(sheets, loaded):
+    df = sheets["Students"]
+    expected = int((df["Unexcused Absences"] == 0).sum())
+    message = _ask(sheets, loaded, "how many students have an unexcused absence count of 0")
+    assert str(expected) in message
+
+
+def test_discipline_record_presence_question_answers_correctly(sheets, loaded):
+    df = sheets["Students"]
+    expected = int(df["Discipline Information"].notna().sum())
+    message = _ask(sheets, loaded, "how many students have a discipline record on file")
+    assert str(expected) in message
