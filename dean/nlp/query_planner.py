@@ -56,6 +56,18 @@ _NUMERIC_CONCEPTS = (
     "date_of_birth", "entry_date", "withdrawal_date",
 )
 
+# Fallback subset of _NUMERIC_CONCEPTS for "no <concept>" / "zero <concept>"
+# when no frame/dtype is available to check directly (see _detect_filters).
+# Deliberately excludes gpa/attendance_rate/sat*/psat*/grad_year/dates: "no
+# GPA" or "no SAT score" more naturally means the data is missing (never
+# took the test), not literally scored/graded a 0, and a year obviously
+# can't be 0. Also excludes balance_due -- a college tuition-billing concept
+# with no Skyward/HS equivalent (not in knowledge/skyward_field_map.json),
+# out of scope for the 9-12 target this app now focuses on.
+_ZERO_FRIENDLY_NUMERIC_CONCEPTS = (
+    "unexcused_absences", "excused_absences", "days_absent", "days_tardy",
+)
+
 _COMPARISON_WORDS = {
     "greater_than": [
         "greater than", "more than", "higher than", "larger than",
@@ -78,11 +90,23 @@ _COMPARISON_WORDS = {
 # these as clause connectors, or "GPA of 3.5 or higher" gets torn into "...
 # 3.5" and "higher" -- neither half contains the full comparison, so the
 # threshold is silently dropped instead of parsed.
-_AND_OR_COMPARISON_CONTINUATIONS = frozenset(
+#
+# Tracked separately per connector: "or more"'s continuation is "more", but
+# that must only guard splits on "or", not "and" -- a shared set meant
+# genuinely independent clauses like "more than 3 excused absences AND more
+# than 2 unexcused absences" silently lost the second clause, because "and"
+# followed by "more" matched the (wrongly shared) "or more" guard.
+_AND_COMPARISON_CONTINUATIONS = frozenset(
     phrase.split(" ", 1)[1]
     for words in _COMPARISON_WORDS.values()
     for phrase in words
-    if phrase.startswith(("and ", "or "))
+    if phrase.startswith("and ")
+)
+_OR_COMPARISON_CONTINUATIONS = frozenset(
+    phrase.split(" ", 1)[1]
+    for words in _COMPARISON_WORDS.values()
+    for phrase in words
+    if phrase.startswith("or ")
 )
 
 # Symbolic comparisons ("gpa >= 2", "gpa < 3") map to operators directly.
@@ -207,7 +231,7 @@ def _rule_plan(user_request: str, sheet: str, columns: list[str], frame=None) ->
     value_column = _detect_value_column(text, columns, synonyms, operation)
     # Pass the original (un-normalized) text so the notes filter can preserve
     # quoted phrases verbatim — normalize_text strips quotes and punctuation.
-    filters = _detect_filters(text, columns, synonyms, original_text=user_request)
+    filters = _detect_filters(text, columns, synonyms, original_text=user_request, frame=frame)
 
     # Categorical value filters detected from the actual data ("Accounting" ->
     # Department, "seniors" -> Year), for columns not already filtered.
@@ -539,7 +563,16 @@ def _detect_group_by(
         r"\b(?:most|fewest|highest|lowest|largest|smallest|biggest|least|greatest|best|worst|top|bottom)\b",
         text,
     )
-    if subject:
+    if subject and normalize_text(subject.group(1)) not in {
+        "student", "students", "person", "people", "learner", "learners",
+    }:
+        # "which student has the most absences" must NOT land here: each
+        # student is already one row, so grouping by Student ID produces a
+        # meaningless count of 1 per group (real bug: "which student has
+        # the most unexcused absences" answered "SKY100001 has the highest
+        # Count (1)", nonsense). "which major/advisor has the most X" is the
+        # legitimate case this guards -- those really are grouping
+        # dimensions. Falls through to the top-N row-ranking detector below.
         column = _resolve_phrase_to_column(subject.group(1), columns, synonyms, take=2, from_end=True)
         if column:
             return column
@@ -958,7 +991,7 @@ def _detect_value_column(
 
 
 def _detect_filters(text: str, columns: list[str], synonyms: dict[str, Any],
-                    *, original_text: str | None = None) -> list[dict[str, Any]]:
+                    *, original_text: str | None = None, frame=None) -> list[dict[str, Any]]:
     filters: list[dict[str, Any]] = []
 
     # Free-text notes search comes first so its tokens ("notes", "mention",
@@ -976,8 +1009,15 @@ def _detect_filters(text: str, columns: list[str], synonyms: dict[str, Any],
     if " between " in f" {text} ":
         chunks = [text]
     else:
-        continuations = "|".join(re.escape(w) for w in _AND_OR_COMPARISON_CONTINUATIONS)
-        chunks = re.split(rf"\s+(?:and|or|;)(?!\s+(?:{continuations}))\s+", text)
+        # An impossible-to-match pattern when a continuation set is empty, so
+        # the negative lookahead never blocks a split (an empty alternation
+        # would instead match the empty string and block every split).
+        and_continuations = "|".join(re.escape(w) for w in _AND_COMPARISON_CONTINUATIONS) or r"(?!x)x"
+        or_continuations = "|".join(re.escape(w) for w in _OR_COMPARISON_CONTINUATIONS) or r"(?!x)x"
+        chunks = re.split(
+            rf"\s+(?:and(?!\s+(?:{and_continuations}))|or(?!\s+(?:{or_continuations}))|;)\s+",
+            text,
+        )
     for chunk in chunks:
         chunk_filter = _numeric_filter(chunk, columns, synonyms)
         if chunk_filter and chunk_filter["column"] not in seen_numeric_cols:
@@ -1035,11 +1075,16 @@ def _detect_filters(text: str, columns: list[str], synonyms: dict[str, Any],
     # Have withdrawn / has withdrawn. "withdrawn"/"withdrew" don't literally
     # contain "withdrawal date" (the column name), so the generic have/has
     # literal-substring fallback below never catches this common phrasing --
-    # it needs the same concept-level bridge as "no advisor" above.
+    # it needs the same concept-level bridge as "no advisor" above. Negated
+    # forms ("no withdrawal", "have not withdrawn") flip the operator --
+    # without this check, "no discipline record" resolved to is_not_missing,
+    # a confidently BACKWARDS answer (real bug caught testing the Skyward
+    # roster: the rule matched the phrase regardless of a leading negation).
     if any(_term_in_text(p, text) for p in ("withdrawn", "withdrew", "have withdrawal")):
         column, score = match_column_for_concept("withdrawal_date", columns, synonyms)
         if column and score >= 0.55:
-            filters.append({"column": column, "operator": "is_not_missing"})
+            negated = _has_missing_language(text) or " not " in text or "n't " in text
+            filters.append({"column": column, "operator": "is_missing" if negated else "is_not_missing"})
 
     # Discipline/conduct record on file. "discipline record"/"conduct record"
     # don't literally contain "discipline information" (the real Skyward
@@ -1047,7 +1092,8 @@ def _detect_filters(text: str, columns: list[str], synonyms: dict[str, Any],
     if any(_term_in_text(p, text) for p in ("discipline record", "conduct record", "disciplinary record")):
         column, score = match_column_for_concept("conduct_status", columns, synonyms)
         if column and score >= 0.55:
-            filters.append({"column": column, "operator": "is_not_missing"})
+            negated = _has_missing_language(text) or " not " in text or "n't " in text
+            filters.append({"column": column, "operator": "is_missing" if negated else "is_not_missing"})
 
     # Owe money / unpaid balance (> 0).
     if any(_term_in_text(p, text) for p in ("owe", "unpaid", "balance due", "owes money", "outstanding")):
@@ -1055,16 +1101,74 @@ def _detect_filters(text: str, columns: list[str], synonyms: dict[str, Any],
         if column and score >= 0.55 and not numeric:
             filters.append({"column": column, "operator": "greater_than", "value": 0})
 
+    # "missing/without (both) <column A> and <column B>" -- two independent
+    # missing-data clauses joined by "and". Without this, only the first
+    # clause resolved (the second was silently dropped), and when "both"
+    # sat between "missing" and the first column name it broke the match
+    # entirely and fell through to a weak fallback that resolved to a
+    # completely unrelated column (real bug: "missing both a guardian phone
+    # and a guardian email" answered against the Name column). Runs before
+    # the single-column loop below so both columns land as separate filters.
+    two_col_missing = re.search(
+        r"\b(?:missing|without)\s+(?:both\s+)?(?:a\s+|an\s+|the\s+)?([a-z]+(?:\s+[a-z]+){0,2}?)"
+        r"\s+and\s+(?:a\s+|an\s+|the\s+)?([a-z]+(?:\s+[a-z]+){0,2})\b",
+        text,
+    )
+    if two_col_missing:
+        col_a = _resolve_phrase_to_column(two_col_missing.group(1), columns, synonyms, take=3, from_end=True)
+        col_b = _resolve_phrase_to_column(two_col_missing.group(2), columns, synonyms, take=3, from_end=True)
+        if col_a and col_b and col_a != col_b:
+            filters.append({"column": col_a, "operator": "is_missing"})
+            filters.append({"column": col_b, "operator": "is_missing"})
+
     # Generic "missing / no / without / blank / empty <column>" for any column
     # not already filtered above (e.g. "students missing a Second Major").
+    # "no <column>" against a genuinely numeric/countable column (tardies,
+    # absences, SAT scores, ...) means the count is zero, NOT that the cell
+    # is blank -- "no tardies" on a real int column with actual 0 values
+    # (none of them NaN) used to emit is_missing and silently answer 0
+    # regardless of how many students really had zero tardies. Only "no" and
+    # "zero" carry that count-is-zero meaning; "missing"/"blank"/"empty"
+    # still mean the cell itself is absent, for any column type.
+    #
+    # Driven by the sheet's real dtype (via `frame`) rather than a fixed list
+    # of known concepts, so it generalizes to any numeric column the sheet
+    # actually has -- including ones with no dedicated concept entry yet.
+    # Falls back to a small curated concept list only when no frame is
+    # available (e.g. a unit test exercising this function in isolation).
+    numeric_concept_columns: set[str] = set()
+    if frame is not None:
+        for column in columns:
+            if column not in frame.columns:
+                continue
+            kind = frame[column].dtype.kind
+            if kind in ("i", "u", "f"):  # signed/unsigned int, float -- not bool ('b') or datetime ('M')
+                numeric_concept_columns.add(column)
+    else:
+        for concept in _ZERO_FRIENDLY_NUMERIC_CONCEPTS:
+            col, score = match_column_for_concept(concept, columns, synonyms)
+            if col and score >= 0.55:
+                numeric_concept_columns.add(col)
     already = {f["column"] for f in filters}
     for column in columns:
         if column in already:
             continue
         normalized = normalize_text(column)
+        is_numeric_count_column = column in numeric_concept_columns
+        zero_keywords = ("no", "zero", "have no", "has no") if is_numeric_count_column else ()
         if any(
             f"{keyword} {article}{normalized}" in text
-            for keyword in ("missing", "no", "without", "blank", "empty", "have no", "has no")
+            for keyword in zero_keywords
+            for article in ("", "a ", "an ", "the ")
+        ):
+            filters.append({"column": column, "operator": "equals", "value": 0})
+            continue
+        blank_keywords = ("missing", "without", "blank", "empty") if is_numeric_count_column else (
+            "missing", "no", "without", "blank", "empty", "have no", "has no"
+        )
+        if any(
+            f"{keyword} {article}{normalized}" in text
+            for keyword in blank_keywords
             for article in ("", "a ", "an ", "the ")
         ):
             filters.append({"column": column, "operator": "is_missing"})
@@ -1092,7 +1196,22 @@ def _detect_filters(text: str, columns: list[str], synonyms: dict[str, Any],
             for keyword in ("have", "has", "with")
             for article in ("", "a ", "an ", "the ")
         ):
-            filters.append({"column": column, "operator": "is_not_missing"})
+            # Postfix negation ("an SAT Math score missing", "GPA is blank")
+            # flips the meaning -- without this check, "have an SAT Math
+            # score missing" matched the literal "have a(n) <column>"
+            # substring and answered is_not_missing (the students WHO HAVE
+            # a score), the exact opposite of what was asked. The prefix
+            # forms above ("missing X") were already handled; this is the
+            # same word pair in the other order.
+            trailing_negation = re.search(
+                rf"\b{re.escape(normalized)}\b(?:\s+\w+){{0,2}}?\s+(?:is\s+|was\s+|are\s+)?"
+                rf"(?:missing|blank|empty|not\s+on\s+file|not\s+recorded|not\s+available)\b",
+                text,
+            )
+            filters.append({
+                "column": column,
+                "operator": "is_missing" if trailing_negation else "is_not_missing",
+            })
 
     return filters
 
@@ -1820,7 +1939,11 @@ def _numeric_filter(text: str, columns: list[str], synonyms: dict[str, Any]) -> 
     # have an unexcused absence count of 0" used to return all 250 rows).
     # Concept-resolution only (no literal-substring or GPA-range default) so
     # this can't misfire on unrelated "... out of 250" style phrasing.
-    match = re.search(r"([a-z0-9 ]*?)\bof\s+([0-9]+(?:\.[0-9]+)?)\b([a-z0-9 ]*)", text)
+    # Optional filler between "of" and the number ("of exactly 0", "of
+    # precisely 4.0") -- without it, "tardies of exactly 0" matched nothing.
+    match = re.search(
+        r"([a-z0-9 ]*?)\bof\s+(?:exactly\s+|precisely\s+)?([0-9]+(?:\.[0-9]+)?)\b([a-z0-9 ]*)", text,
+    )
     if match:
         before = " ".join(match.group(1).strip().split()[-3:])
         after = " ".join(match.group(3).strip().split()[:3])
@@ -2078,7 +2201,7 @@ def _detect_limit(text: str) -> int | None:
 
 # Direction cues that pair with a row-preview top-N (NOT a min/max aggregate).
 _TOP_N_DESC = ("top", "highest", "largest", "best", "greatest", "biggest", "most")
-_TOP_N_ASC = ("bottom", "lowest", "smallest", "worst", "least", "weakest", "poorest")
+_TOP_N_ASC = ("bottom", "lowest", "smallest", "worst", "least", "weakest", "poorest", "fewest")
 
 
 def _detect_top_n(
@@ -2130,6 +2253,36 @@ def _detect_top_n(
                 n = int(match.group(1))
                 sort_phrase = (match.group(2) or "").strip()
                 break
+
+    # Form C: "N students with the most/least <column>" -- the number
+    # precedes "students", not the direction cue, so neither Form A nor
+    # Form B matched at all ("show me the 5 students with the most
+    # unexcused absences" silently fell through to a plain, unsorted,
+    # unlimited row listing). The trailing sort column is picked up by the
+    # numeric-concept fallback below, same as Forms A/B.
+    if direction is None:
+        cue_group = "|".join(re.escape(c) for c in (*_TOP_N_DESC, *_TOP_N_ASC))
+        match = re.search(
+            rf"\b([0-9]+)\s+(?:students?|people|rows?)\s+with\s+the\s+({cue_group})\b", text,
+        )
+        if match:
+            n = int(match.group(1))
+            direction = "asc" if match.group(2) in _TOP_N_ASC else "desc"
+
+    # Form D: "which student has the most/fewest <column>" -- a singular
+    # superlative with no explicit number, asking for the one row with the
+    # extreme value. Without this, "which student has the most unexcused
+    # absences" fell into _detect_group_by's subject-superlative pattern,
+    # grouping by Student ID -- since each student is already one row, that
+    # produced a meaningless count of 1 per group.
+    if direction is None:
+        cue_group = "|".join(re.escape(c) for c in (*_TOP_N_DESC, *_TOP_N_ASC))
+        match = re.search(
+            rf"\b(?:which|what)\s+(?:student|person)\s+(?:has|have|had)\s+the\s+({cue_group})\b", text,
+        )
+        if match:
+            n = 1
+            direction = "asc" if match.group(1) in _TOP_N_ASC else "desc"
 
     if direction is None or n is None:
         return None

@@ -267,6 +267,131 @@ def test_bare_year_equality_resolves_for_a_recognized_date_concept(synonyms):
     }
 
 
+def test_have_column_missing_postfix_is_not_inverted(synonyms):
+    # Regression: "have an SAT Math score missing" matched the "have a(n)
+    # <column>" literal-substring fallback and answered is_not_missing (the
+    # students WHO HAVE a score) -- the exact opposite of what was asked.
+    # Postfix negation words after the column phrase must flip the operator.
+    from nlp.query_planner import _detect_filters
+
+    cols = ["SAT Math", "Phone", "GPA"]
+    assert _detect_filters(
+        "how many students have an sat math score missing", cols, synonyms,
+    ) == [{"column": "SAT Math", "operator": "is_missing"}]
+    assert _detect_filters(
+        "how many students have a phone number missing", cols, synonyms,
+    ) == [{"column": "Phone", "operator": "is_missing"}]
+    assert _detect_filters("how many students have gpa blank", cols, synonyms) == [
+        {"column": "GPA", "operator": "is_missing"}
+    ]
+    # Un-negated "have X" still means present.
+    assert _detect_filters(
+        "how many students have a phone number on file", cols, synonyms,
+    ) == [{"column": "Phone", "operator": "is_not_missing"}]
+
+
+def test_missing_both_x_and_y_resolves_two_independent_filters(synonyms):
+    # Regression: "missing both a guardian phone and a guardian email"
+    # answered against the "Name" column entirely -- "both" sitting between
+    # "missing" and the first column name broke the literal-substring match,
+    # and the weak fallback that caught it resolved to an unrelated column.
+    # Even without "both", only the first "and"-joined clause was kept.
+    from nlp.query_planner import _detect_filters
+
+    cols = ["Guardian Phone", "Guardian Email", "Emergency Contact", "Name"]
+    assert _detect_filters(
+        "how many students are missing both a guardian phone and a guardian email",
+        cols, synonyms,
+    ) == [
+        {"column": "Guardian Phone", "operator": "is_missing"},
+        {"column": "Guardian Email", "operator": "is_missing"},
+    ]
+    assert _detect_filters(
+        "how many students are missing a guardian phone and an emergency contact",
+        cols, synonyms,
+    ) == [
+        {"column": "Guardian Phone", "operator": "is_missing"},
+        {"column": "Emergency Contact", "operator": "is_missing"},
+    ]
+
+
+def test_and_clause_with_more_than_still_splits_into_two_filters(synonyms):
+    # Regression: the AND/OR continuation guard (added to protect "gpa of
+    # 3.5 or higher" from being torn apart) was shared between "and" and
+    # "or". "or more"'s continuation word "more" incorrectly also blocked
+    # splitting on "and more" -- "more than 3 excused absences AND more
+    # than 2 unexcused absences" silently lost the second clause. The guard
+    # must be tracked separately per connector.
+    from nlp.query_planner import _detect_filters
+
+    cols = ["Excused Absences", "Unexcused Absences"]
+    filters = _detect_filters(
+        "how many students have more than 3 excused absences and more than 2 unexcused absences",
+        cols, synonyms,
+    )
+    assert filters == [
+        {"column": "Excused Absences", "operator": "greater_than", "value": 3},
+        {"column": "Unexcused Absences", "operator": "greater_than", "value": 2},
+    ]
+
+
+def test_zero_or_no_count_generalizes_via_dtype_to_unmodeled_columns(synonyms):
+    # The zero/count logic must generalize from the sheet's real dtype, not
+    # a fixed list of known concepts -- "Detentions" has no dedicated
+    # concept entry anywhere in the codebase, but a real frame makes it
+    # resolvable purely because it's a genuine numeric column.
+    import pandas as pd
+    from nlp.query_planner import _detect_filters
+
+    frame = pd.DataFrame({
+        "Tardies": [0, 1, 2],
+        "Detentions": [0, 0, 1],
+        "Advisor": ["A", "B", None],
+        "GPA Risk": [True, False, False],
+    })
+    cols = list(frame.columns)
+    assert _detect_filters("how many students have no detentions", cols, synonyms, frame=frame) == [
+        {"column": "Detentions", "operator": "equals", "value": 0}
+    ]
+    # Text and bool columns keep the original is_missing meaning.
+    assert _detect_filters("how many students have no advisor", cols, synonyms, frame=frame) == [
+        {"column": "Advisor", "operator": "is_missing"}
+    ]
+    assert _detect_filters("how many students have no gpa risk", cols, synonyms, frame=frame) == [
+        {"column": "GPA Risk", "operator": "is_missing"}
+    ]
+
+
+def test_zero_or_no_count_column_means_count_equals_zero(synonyms):
+    # Regression: "no tardies" on a real numeric column (with actual 0
+    # values, none of them NaN) matched the generic is_missing fallback and
+    # silently answered 0 regardless of how many students really had zero
+    # tardies. "no"/"zero" against a count-type numeric concept must mean
+    # the count is 0, not that the cell is blank.
+    from nlp.query_planner import _detect_filters
+
+    cols = ["Tardies", "Advisor"]
+    assert _detect_filters("how many students have no tardies", cols, synonyms) == [
+        {"column": "Tardies", "operator": "equals", "value": 0}
+    ]
+    assert _detect_filters("how many students have zero tardies", cols, synonyms) == [
+        {"column": "Tardies", "operator": "equals", "value": 0}
+    ]
+    # Non-numeric columns keep the original is_missing meaning.
+    assert _detect_filters("how many students have no advisor", cols, synonyms) == [
+        {"column": "Advisor", "operator": "is_missing"}
+    ]
+
+
+def test_of_exactly_n_resolves_same_as_bare_of_n(synonyms):
+    from nlp.query_planner import _numeric_filter
+
+    cols = ["Tardies"]
+    assert _numeric_filter("tardies of exactly 0", cols, synonyms) == {
+        "column": "Tardies", "operator": "equals", "value": 0,
+    }
+
+
 def test_grade_name_prefix_does_not_steal_the_adjacent_numeric_column(synonyms):
     # Regression: "9th graders have more than 3 unexcused absences" resolved
     # to {"column": "Grade", "operator": "greater_than", "value": 3} -- the

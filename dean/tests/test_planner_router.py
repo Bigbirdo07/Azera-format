@@ -1226,6 +1226,68 @@ def test_n_lowest_column_students(sheets, columns):
     assert p["limit"] == 10
 
 
+def test_n_students_with_the_most_column_phrasing(sheets, columns):
+    # Regression: "N students with the most X" -- the number precedes
+    # "students", not the direction cue ("most"), so neither the "top N"
+    # nor the "N highest X" forms matched at all. It silently fell through
+    # to an unsorted, unlimited row listing instead of the top N.
+    r = _route("show me the 5 students with the most GPA", sheets, {"Students": columns})
+    p = r["plan"]
+    assert p["operation"] == "filtered_preview"
+    assert p["sort"] == {"column": "GPA", "direction": "desc"}
+    assert p["limit"] == 5
+
+
+def test_which_student_has_the_most_column_phrasing(sheets, columns):
+    # Regression: "which student has the most X" fell into the group_by
+    # subject-superlative pattern (designed for "which advisor/major has
+    # the most X") and grouped by Student ID -- since each student is
+    # already one row, that produced a meaningless count of 1 per group.
+    r = _route("which student has the most GPA", sheets, {"Students": columns})
+    p = r["plan"]
+    assert p["operation"] == "filtered_preview"
+    assert not p["group_by"]
+    assert p["sort"] == {"column": "GPA", "direction": "desc"}
+    assert p["limit"] == 1
+
+
+def test_n_students_with_the_fewest_column_phrasing(sheets, columns):
+    r = _route("show me the 3 students with the fewest GPA", sheets, {"Students": columns})
+    p = r["plan"]
+    assert p["operation"] == "filtered_preview"
+    assert p["sort"] == {"column": "GPA", "direction": "asc"}
+    assert p["limit"] == 3
+
+
+def test_risk_setting_update_routes_correctly(sheets, columns):
+    r = _route("change the GPA risk threshold to 2.5", sheets, {"Students": columns})
+    assert r["intent"] == "risk_setting_update"
+    assert r["plan"] == {"field": "gpa_risk_threshold", "value": 2.5}
+    assert r["requires_confirmation"] is False
+
+
+def test_risk_setting_update_out_of_range_routes_to_clarify(sheets, columns):
+    r = _route("change the GPA risk threshold to 25", sheets, {"Students": columns})
+    assert r["intent"] == "clarify"
+    assert "0.0" in r["confirmation_reason"] and "4.0" in r["confirmation_reason"]
+
+
+def test_risk_setting_update_resolves_before_field_update_can_misroute_it(sheets, columns):
+    # Regression: parse_field_update's generic "set/change/update <anything>
+    # to <anything>" regex also matches this phrasing. Without the
+    # risk-setting detector running first, this used to resolve
+    # field_status("gpa risk threshold") to "unknown" and misroute to
+    # intent="unsupported" with a confusing "not an editable field" message
+    # instead of actually applying the change.
+    r = _route("change the GPA risk threshold to 2.5", sheets, {"Students": columns})
+    assert r["intent"] != "unsupported"
+    assert r["intent"] == "risk_setting_update"
+    # An ordinary workbook field update must still work unaffected.
+    r2 = _route("change their advisor to Dr. Smith", sheets, {"Students": columns})
+    assert r2["intent"] in {"field_update", "unsupported"}
+    assert r2["intent"] != "risk_setting_update"
+
+
 def test_top_n_does_not_clobber_average(sheets, columns):
     """An 'average X' question is not a top-N row preview."""
     r = _route("average GPA", sheets, {"Students": columns})

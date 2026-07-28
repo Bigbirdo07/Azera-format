@@ -122,3 +122,74 @@ def parse_field_update(request: str) -> tuple[str, str] | None:
     if not field_name or not value:
         return None
     return field_name, value
+
+
+# Chat-driven risk-threshold updates ("change the GPA risk threshold to
+# 2.5"). Ordered specific-before-generic throughout: "severe attendance
+# risk" before the bare "attendance risk" entry, and every "psat ..." cue
+# before the corresponding "sat ..." cue (real bug caught by this file's own
+# tests: "psat math benchmark" literally contains "sat math benchmark" as a
+# substring, so checking "sat math benchmark" first misresolved "set the
+# psat math benchmark to 480" to sat_math_benchmark_threshold instead of
+# psat_math_benchmark_threshold) -- same class of bug as this session's
+# _NUMERIC_CONCEPTS ordering fix.
+_RISK_SETTING_FIELD_CUES: tuple[tuple[str, str], ...] = (
+    ("severe attendance risk", "severe_attendance_risk_threshold"),
+    ("severe attendance threshold", "severe_attendance_risk_threshold"),
+    ("attendance risk", "attendance_risk_threshold"),
+    ("attendance threshold", "attendance_risk_threshold"),
+    ("gpa risk", "gpa_risk_threshold"),
+    ("gpa threshold", "gpa_risk_threshold"),
+    ("unexcused absence concern", "unexcused_absence_concern"),
+    ("unexcused absences threshold", "unexcused_absence_concern"),
+    ("unexcused absence threshold", "unexcused_absence_concern"),
+    ("tardy concern", "tardy_concern"),
+    ("tardies threshold", "tardy_concern"),
+    ("tardy threshold", "tardy_concern"),
+    ("high risk signal count", "high_risk_signal_count"),
+    ("high risk signal threshold", "high_risk_signal_count"),
+    ("moderate risk signal count", "moderate_risk_signal_count"),
+    ("moderate risk signal threshold", "moderate_risk_signal_count"),
+    ("psat math benchmark", "psat_math_benchmark_threshold"),
+    ("psat reading writing benchmark", "psat_reading_writing_benchmark_threshold"),
+    ("psat reading benchmark", "psat_reading_writing_benchmark_threshold"),
+    ("sat math benchmark", "sat_math_benchmark_threshold"),
+    ("sat ebrw benchmark", "sat_ebrw_benchmark_threshold"),
+    ("sat reading benchmark", "sat_ebrw_benchmark_threshold"),
+)
+_RISK_SETTING_VERBS = ("set", "change", "update", "lower", "raise", "increase", "decrease", "make")
+_TRAILING_NUMBER_RE = re.compile(r"(-?\d+(?:\.\d+)?)")
+
+
+def is_risk_setting_update_request(request: str) -> bool:
+    text = normalize_text(request)
+    if not any(re.search(rf"(?<!\w){verb}(?!\w)", text) for verb in _RISK_SETTING_VERBS):
+        return False
+    return any(cue in text for cue, _field in _RISK_SETTING_FIELD_CUES)
+
+
+def parse_risk_setting_update(request: str) -> tuple[str, float] | None:
+    """Parse "change the GPA risk threshold to 2.5" into a (field, value)
+    pair validated against RiskSettings' real field names. Returns None
+    when no known threshold cue or no number resolves -- the caller then
+    falls through to existing behavior (e.g. parse_field_update) untouched.
+    """
+    if not is_risk_setting_update_request(request):
+        return None
+    text = normalize_text(request)
+    field = None
+    for cue, mapped_field in _RISK_SETTING_FIELD_CUES:
+        if cue in text:
+            field = mapped_field
+            break
+    if not field:
+        return None
+    # "to <value>" is the common shape ("change X to 2.5"); fall back to the
+    # last bare number in the message ("make the gpa threshold 2.5").
+    to_match = re.search(r"\bto\s+(-?\d+(?:\.\d+)?)\b", text)
+    if to_match:
+        return field, float(to_match.group(1))
+    numbers = _TRAILING_NUMBER_RE.findall(text)
+    if numbers:
+        return field, float(numbers[-1])
+    return None

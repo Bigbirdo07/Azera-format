@@ -203,6 +203,72 @@ def test_entered_before_year_question_answers_correctly(sheets, loaded):
     assert str(expected) in message
 
 
+def test_sat_math_score_missing_question_is_not_inverted(sheets, loaded):
+    # Regression: "have an SAT Math score missing" answered is_not_missing
+    # (students who HAVE a score) -- backwards from what was asked.
+    df = sheets["Students"]
+    expected = int(df["SAT Math"].isna().sum())
+    message = _ask(sheets, loaded, "how many students have an sat math score missing")
+    assert str(expected) in message
+
+
+def test_missing_both_guardian_phone_and_email_resolves_correctly(sheets, loaded):
+    df = sheets["Students"]
+    expected = int((df["Guardian Phone"].isna() & df["Guardian Email"].isna()).sum())
+    message = _ask(
+        sheets, loaded,
+        "how many students are missing both a guardian phone and a guardian email",
+    )
+    assert str(expected) in message
+
+
+def test_which_student_has_the_most_unexcused_absences(sheets, loaded):
+    df = sheets["Students"]
+    expected_max = int(df["Unexcused Absences"].max())
+    sheet_columns = {n: list(f.columns) for n, f in sheets.items()}
+    selected_sheet = next(iter(sheets))
+    routing = plan_user_request(
+        user_message="which student has the most unexcused absences", sheets=sheets,
+        sheet_columns=sheet_columns, selected_sheet=selected_sheet, conversation_state={},
+        settings={"llm_enabled": False},
+    )
+    plan = routing["plan"]
+    assert not plan["group_by"]
+    assert plan["sort"] == {"column": "Unexcused Absences", "direction": "desc"}
+    assert plan["limit"] == 1
+    response = execute_planned_request(routing, loaded, {"llm_enabled": False},
+                                       request_summary="which student has the most unexcused absences")
+    assert response["result_preview"][0]["Unexcused Absences"] == expected_max
+
+
+def test_no_discipline_record_question_is_not_inverted(sheets, loaded):
+    # Regression: "no discipline record" answered with is_not_missing (the
+    # count of students WITH a record), a confidently backwards answer --
+    # the presence-detection rule for "discipline record on file" matched
+    # the phrase regardless of a leading negation.
+    df = sheets["Students"]
+    expected = int(df["Discipline Information"].isna().sum())
+    message = _ask(sheets, loaded, "how many students have no discipline record")
+    assert str(expected) in message
+
+
+def test_zero_tardies_question_answers_correctly(sheets, loaded):
+    df = sheets["Students"]
+    expected = int((df["Tardies"] == 0).sum())
+    message = _ask(sheets, loaded, "how many students have no tardies")
+    assert str(expected) in message
+
+
+def test_excused_and_unexcused_compound_filter_keeps_both_clauses(sheets, loaded):
+    df = sheets["Students"]
+    expected = int(((df["Excused Absences"] > 3) & (df["Unexcused Absences"] > 2)).sum())
+    message = _ask(
+        sheets, loaded,
+        "how many students have more than 3 excused absences and more than 2 unexcused absences",
+    )
+    assert str(expected) in message
+
+
 def test_freshmen_and_sophomores_question_includes_both_grades(sheets, loaded):
     # Regression: "freshmen and sophomores" only matched the first grade
     # name found (Grade == 9), silently dropping sophomores entirely.

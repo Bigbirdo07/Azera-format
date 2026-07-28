@@ -40,7 +40,7 @@ from core.interaction_logger import (
     log_interaction,
     workbook_schema_hash,
 )
-from core.risk_settings import load_risk_settings
+from core.risk_settings import apply_risk_setting_update, load_risk_settings
 from core.session_memory import SessionMemory
 from core.session_workbook import SessionWorkbook
 from nlp.question_library import (
@@ -326,6 +326,24 @@ def route_message(
             loaded=loaded, settings=settings, memory=memory, followup=followup,
         )
         _save_memory(memory)
+        return
+
+    if intent == "risk_setting_update":
+        # Session-only config change, no workbook/sheets/filters involved --
+        # applied directly here rather than through execute_planned_request
+        # (core/execution_dispatcher.py), the same bypass shape as "edit"
+        # above. No confirmation step (UX decision): this is easily
+        # reversible and never touches a workbook file, unlike Academic
+        # Watch/Attendance Watch/field_update.
+        field = routing["plan"]["field"]
+        value = routing["plan"]["value"]
+        old, new = apply_risk_setting_update(st.session_state, field, value)
+        old_value, new_value = getattr(old, field), getattr(new, field)
+        label = field.replace("_", " ").replace(" threshold", "").strip()
+        _say(f"Got it -- {label} changed from {old_value} to {new_value} for this session.")
+        memory.last_request = request
+        _save_memory(memory)
+        _log_turn(request=request, routing=routing, sheet_columns=sheet_columns, settings=settings)
         return
 
     if routing["requires_confirmation"]:

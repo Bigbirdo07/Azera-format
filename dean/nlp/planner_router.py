@@ -19,6 +19,7 @@ import pandas as pd
 from core.field_policy import field_status
 from core.llm_config import from_app_settings
 from core.privacy import is_hidden_by_default, requested_sensitive_columns
+from core.risk_settings import RISK_SETTING_BOUNDS
 from core.schema import canonical_for, canonical_map, infer_column_types
 from nlp.conversation import (
     FOLLOWUP,
@@ -49,6 +50,7 @@ from nlp.request_intents import (
     is_note_request,
     parse_field_update,
     parse_note,
+    parse_risk_setting_update,
 )
 from nlp.suggestions import suggest_next_moves
 from nlp.synonym_mapper import load_json, load_synonyms_with_learned, match_column_for_concept, normalize_text
@@ -397,6 +399,31 @@ def _classify_action_intent(message, columns, state, sheet, frame=None) -> dict[
     chain = parse_action_chain(message)
     if chain is not None:
         return _build_action_chain_routing(message, chain, active, sheet, columns)
+
+    # Chat-driven risk-threshold updates ("change the GPA risk threshold to
+    # 2.5"). Must run BEFORE parse_field_update below: that function's regex
+    # ("set/change/update <anything> to <anything>") also matches this
+    # phrasing, and would resolve field_status("gpa risk threshold") to
+    # "unknown" and misroute to intent="unsupported" with a confusing "not
+    # an editable field" message instead of actually applying the change.
+    risk_setting = parse_risk_setting_update(message)
+    if risk_setting is not None:
+        field, value = risk_setting
+        low, high = RISK_SETTING_BOUNDS[field]
+        if not (low <= value <= high):
+            label = field.replace("_", " ")
+            return _result(
+                plan_source="rules", intent="clarify", confidence=1.0,
+                plan=None, llm_used=False,
+                confirmation_reason=(
+                    f"{label} should be between {low} and {high} -- {value} is outside that range."
+                ),
+            )
+        return _result(
+            plan_source="rules", intent="risk_setting_update", confidence=1.0,
+            plan={"field": field, "value": value}, llm_used=False,
+            requires_confirmation=False,
+        )
 
     field_update = parse_field_update(message)
     if field_update is not None:

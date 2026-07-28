@@ -13,7 +13,7 @@ new session falls back to defaults cleanly.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 
 
 @dataclass(frozen=True)
@@ -89,3 +89,48 @@ def load_risk_settings(session_state) -> RiskSettings:
 
 def save_risk_settings(session_state, settings: RiskSettings) -> None:
     session_state["risk_settings"] = settings.to_dict()
+
+
+# ---- chat-driven threshold updates -----------------------------------------
+
+# Sane min/max per field. Out-of-range values are rejected (the caller routes
+# to a clarify response), never silently clamped.
+RISK_SETTING_BOUNDS: dict[str, tuple[float, float]] = {
+    "gpa_risk_threshold": (0.0, 4.0),
+    "attendance_risk_threshold": (0.0, 100.0),
+    "severe_attendance_risk_threshold": (0.0, 100.0),
+    "unexcused_absence_concern": (0, 60),
+    "tardy_concern": (0, 60),
+    "high_risk_signal_count": (0, 10),
+    "moderate_risk_signal_count": (0, 10),
+    "sat_math_benchmark_threshold": (200, 800),
+    "sat_ebrw_benchmark_threshold": (200, 800),
+    "psat_math_benchmark_threshold": (160, 760),
+    "psat_reading_writing_benchmark_threshold": (160, 760),
+}
+
+# These fields are counts, not continuous thresholds -- cast to int on apply.
+RISK_SETTING_INT_FIELDS = frozenset({
+    "unexcused_absence_concern", "tardy_concern",
+    "high_risk_signal_count", "moderate_risk_signal_count",
+})
+
+
+def apply_risk_setting_update(
+    session_state, field: str, value: float,
+) -> tuple[RiskSettings, RiskSettings]:
+    """Apply a chat-driven threshold change for the rest of this session.
+
+    ``RiskSettings`` is frozen, so the only correct way to change one field
+    is to build a new instance via ``dataclasses.replace`` -- mirrors what
+    ui/settings_panel.py already does by rebuilding the whole dataclass on
+    every widget interaction. Returns (old, new) so the caller can narrate
+    the diff. session_state stays duck-typed (get/__setitem__) like
+    load_risk_settings/save_risk_settings, so this is testable without
+    Streamlit.
+    """
+    old = load_risk_settings(session_state)
+    coerced: float | int = int(value) if field in RISK_SETTING_INT_FIELDS else float(value)
+    new = replace(old, **{field: coerced})
+    save_risk_settings(session_state, new)
+    return old, new
