@@ -839,7 +839,23 @@ def _find_column_by_names(columns: list[str], names: tuple[str, ...]) -> str | N
             return column
     for column in columns:
         normalized = normalize_text(column)
-        if any(target and (target in normalized or normalized in target) for target in targets):
+        # `normalized in target` (a real column name found INSIDE a longer
+        # alias phrase) is only safe for column names long enough that a
+        # match is unlikely to be one incidental word out of an unrelated
+        # multi-word phrase. Without this guard, resolving "gpa" pulled in
+        # the alias "grade point average", and a real "Grade" column
+        # (normalized "grade", 5 chars) matched via `normalized in target`
+        # since "grade" is literally the first word of that phrase --
+        # `_metric_column_from_text("... average gpa by grade ...")`
+        # resolved to the Grade column instead of the actual GPA column,
+        # crashing pivot_table_summary (pandas can't group and value on the
+        # same column: "Grouper for 'Grade' not 1-dimensional"). The
+        # `target in normalized` direction (a short alias keyword found
+        # inside a longer real column name, e.g. "gpa" in "current
+        # cumulative gpa") is unaffected and stays unguarded.
+        if any(target and target in normalized for target in targets):
+            return column
+        if any(target and len(normalized) > 5 and normalized in target for target in targets):
             return column
     return None
 

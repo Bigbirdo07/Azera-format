@@ -1259,6 +1259,31 @@ def test_n_students_with_the_fewest_column_phrasing(sheets, columns):
     assert p["limit"] == 3
 
 
+def test_freshmen_and_sophomores_resolves_both_values_on_categorical_column(sheets, columns):
+    # Regression: detect_value_filters (nlp/conversation.py) matches
+    # column values against the message text, but broke out of the
+    # per-column scan after the FIRST matching value -- "how many freshmen
+    # and sophomores are there" only ever counted freshmen, silently
+    # dropping "sophomores" even though it's the same Year column and just
+    # as literally present in the text. Multiple matches must produce an
+    # "in" filter, not stop at the first "equals".
+    df = sheets["Students"]
+    expected = int(((df["Year"] == "Freshman") | (df["Year"] == "Sophomore")).sum())
+    r = _route("how many freshmen and sophomores are there", sheets, {"Students": columns})
+    p = r["plan"]
+    assert p["filters"] == [{"column": "Year", "operator": "in", "value": ["Freshman", "Sophomore"]}]
+    from core.query_engine import run_query
+    result = run_query(p, sheets)
+    assert result.value == expected
+
+
+def test_single_grade_name_still_resolves_to_equals(sheets, columns):
+    # A lone match must NOT become a single-item "in" list -- keeps the
+    # simpler, pre-existing "equals" shape for the common case.
+    r = _route("how many seniors are there", sheets, {"Students": columns})
+    assert r["plan"]["filters"] == [{"column": "Year", "operator": "equals", "value": "Senior"}]
+
+
 def test_risk_setting_update_routes_correctly(sheets, columns):
     r = _route("change the GPA risk threshold to 2.5", sheets, {"Students": columns})
     assert r["intent"] == "risk_setting_update"

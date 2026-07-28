@@ -322,6 +322,14 @@ def detect_value_filters(
         uniques = series.dropna().astype(str).unique()
         if len(uniques) == 0 or len(uniques) > _MAX_CATEGORICAL_CARDINALITY:
             continue
+        # Collect ALL matching values in this column before deciding the
+        # operator -- "how many freshmen and sophomores are there" used to
+        # `break` after the FIRST matching value (Freshman), moving on to
+        # the next column entirely and silently dropping "sophomores" even
+        # though it's the same column and just as literally present in the
+        # text. Multiple matches become an "in" filter instead of "equals".
+        matched_values: list[str] = []
+        matched_normalized: list[str] = []
         for value in uniques:
             normalized_value = normalize_text(value)
             if not normalized_value or len(normalized_value) < 3 or normalized_value in used_values:
@@ -333,10 +341,15 @@ def detect_value_filters(
                 or _phrase_in(normalized_value, singular_text)
                 or _phrase_in(singular_value, singular_text)
             ):
-                filters.append({"column": column, "operator": "equals", "value": value})
-                used_values.add(normalized_value)
-                used_columns.add(column)
-                break
+                matched_values.append(value)
+                matched_normalized.append(normalized_value)
+        if matched_values:
+            if len(matched_values) == 1:
+                filters.append({"column": column, "operator": "equals", "value": matched_values[0]})
+            else:
+                filters.append({"column": column, "operator": "in", "value": matched_values})
+            used_values.update(matched_normalized)
+            used_columns.add(column)
 
     return filters
 
